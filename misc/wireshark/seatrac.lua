@@ -682,13 +682,22 @@ function proto.dissector(tvb, pinfo, tree)
 end
 
 ----------------------------------------
--- Register the dissector on UDP port 62001 and for xbee.rf_data
+-- Register the dissector
 ----------------------------------------
+
+-- Port 62001 is the default for UDP traffic within the boat
 local udp_table = DissectorTable.get("udp.port")
 udp_table:add(62001, proto)
 
-pcall(require, "xbee") -- for serial captures over RF link
+-- Enable Decode As for serial captures over RF link
+pcall(require, "xbee")
 local xbee_table = DissectorTable.get("xbee.rf_data")
 if xbee_table then
     xbee_table:add_for_decode_as(proto)
+end
+
+-- Enable Decode As for decrypted TLS traffic
+local tls_table = DissectorTable.get("tls.port")
+if tls_table then
+    tls_table:add_for_decode_as(proto)
 end
