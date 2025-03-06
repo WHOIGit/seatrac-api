@@ -134,6 +134,10 @@ local SinkID                      = {
     WINCH_LOGGER = 114
 }
 
+----------------------------------------
+-- Function ID Enums
+----------------------------------------
+
 local COM_SWITCHES_FunctionID     = {
     SET = 0
 }
@@ -162,6 +166,10 @@ local PC_CAMERA_MGR_FunctionID    = {
     IMAGE_DATA_START = 5,
     PTZ = 5
 }
+
+----------------------------------------
+-- Value Mapping Tables
+----------------------------------------
 
 local camera_locations            = {
     [0] = "Bow",
@@ -222,209 +230,6 @@ local navigator_states            = {
     [8] = "All stop (emergency stop)"
 }
 
--- We no longer need the mapping tables as we'll use enum constants directly
-
--- We'll use direct enum comparisons instead of the helper function
-
-----------------------------------------
--- Proto Fields (header & common)
-----------------------------------------
-local f                           = proto.fields
-f.sync1                           = ProtoField.uint8("seatrac.sync1", "Sync Byte 1", base.HEX)
-f.sync2                           = ProtoField.uint8("seatrac.sync2", "Sync Byte 2", base.HEX)
-f.length                          = ProtoField.uint16("seatrac.length", "Data Length", base.DEC)
-f.relay                           = ProtoField.uint8("seatrac.relay", "Message Relay", base.DEC)
-f.msg_type                        = ProtoField.uint8("seatrac.msg_type", "Message Type", base.DEC,
-    invert_enum(MessageType))
-f.checksum                        = ProtoField.uint16("seatrac.checksum", "Checksum", base.HEX)
-
--- Common fields used in payloads:
-f.sink_id                         = ProtoField.uint8("seatrac.sink_id", "SinkID", base.DEC, invert_enum(SinkID))
-f.board_id                        = ProtoField.uint8("seatrac.board_id", "BoardID", base.DEC, invert_enum(BoardID))
-f.func                            = ProtoField.uint8("seatrac.func", "Function", base.DEC)
--- Function ID fields for specific combinations
-f.com_switches_func               = ProtoField.uint8("seatrac.com_switches_func", "COM_SWITCHES Function", base.DEC,
-    invert_enum(COM_SWITCHES_FunctionID))
-f.com_ais_func                    = ProtoField.uint8("seatrac.com_ais_func", "COM_AIS Function", base.DEC,
-    invert_enum(COM_AIS_FunctionID))
-f.pms_switches_func               = ProtoField.uint8("seatrac.pms_switches_func", "PMS_SWITCHES Function", base.DEC,
-    invert_enum(PMS_SWITCHES_FunctionID))
-f.motor_propulsion_func           = ProtoField.uint8("seatrac.motor_propulsion_func", "MOTOR_PROPULSION Function",
-    base.DEC,
-    invert_enum(MOTOR_PROPULSION_FunctionID))
-f.pc_camera_mgr_func              = ProtoField.uint8("seatrac.pc_camera_mgr_func", "PC_CAMERA_MGR Function", base.DEC,
-    invert_enum(PC_CAMERA_MGR_FunctionID))
-f.raw                             = ProtoField.bytes("seatrac.raw", "Raw Data")
-f.new_state                       = ProtoField.int32("seatrac.new_state", "New State")
-f.rudder_angle                    = ProtoField.float("seatrac.rudder_angle", "Rudder Angle (deg)")
-f.rpm                             = ProtoField.float("seatrac.rpm", "RPM")
-f.heading                         = ProtoField.float("seatrac.heading", "Heading")
-f.speed                           = ProtoField.float("seatrac.speed", "Speed (kts)")
-
--- DATETIME structure fields (8 bytes as defined in document)
-f.datetime                        = ProtoField.none("seatrac.datetime", "DATETIME")
-f.datetime_year                   = ProtoField.uint16("seatrac.datetime.year", "Year", base.DEC)
-f.datetime_month                  = ProtoField.uint8("seatrac.datetime.month", "Month", base.DEC)
-f.datetime_day                    = ProtoField.uint8("seatrac.datetime.day", "Day", base.DEC)
-f.datetime_hour                   = ProtoField.uint8("seatrac.datetime.hour", "Hour", base.DEC)
-f.datetime_minute                 = ProtoField.uint8("seatrac.datetime.minute", "Minute", base.DEC)
-f.datetime_second                 = ProtoField.uint8("seatrac.datetime.second", "Second", base.DEC)
-f.datetime_hundredths             = ProtoField.uint8("seatrac.datetime.hundredths", "Hundredths", base.DEC)
-
--- Power level fields
-f.pack_current                    = ProtoField.int16("seatrac.pack_current", "Pack Current", base.DEC, nil, 0, "×0.002")
-f.load_current                    = ProtoField.int16("seatrac.load_current", "Load Current", base.DEC, nil, 0, "×0.002")
-f.pack_voltage                    = ProtoField.uint16("seatrac.pack_voltage", "Pack Voltage", base.DEC, nil, 0, "×0.001")
-f.soc                             = ProtoField.uint16("seatrac.soc", "SOC%", base.DEC, nil, 0, "×0.002")
-f.unknown2                        = ProtoField.bytes("seatrac.unknown2", "Unknown Fields")
-
--- AIS fields
-f.ais_state                       = ProtoField.uint8("seatrac.ais.state", "AIS State", base.DEC,
-    { [0] = "Off", [1] = "On" })
-f.ais_num_targets                 = ProtoField.uint8("seatrac.ais.num_targets", "Number of AIS Targets", base.DEC)
-f.ais_closest_target              = ProtoField.float("seatrac.ais.closest_target", "Closest AIS Target (nm)")
-f.ais_mmsi                        = ProtoField.uint32("seatrac.ais.mmsi", "MMSI")
-f.ais_speed_over_ground           = ProtoField.uint16("seatrac.ais.speed_over_ground", "Speed over Ground", base.DEC, nil,
-    0, "×0.002")
-f.ais_course_over_ground          = ProtoField.uint16("seatrac.ais.course_over_ground", "Course over Ground", base.DEC,
-    nil, 0, "×0.01")
-f.ais_heading                     = ProtoField.uint16("seatrac.ais.heading", "Heading", base.DEC)
-f.ais_nav_status                  = ProtoField.uint8("seatrac.ais.nav_status", "Navigation Status", base.DEC)
-
--- Attitude fields (shared by several messages)
-f.pitch                           = ProtoField.int16("seatrac.attitude.pitch", "Pitch", base.DEC, nil, 0, "×0.01")
-f.min_pitch                       = ProtoField.int16("seatrac.attitude.min_pitch", "Min Pitch", base.DEC, nil, 0, "×0.01")
-f.max_pitch                       = ProtoField.int16("seatrac.attitude.max_pitch", "Max Pitch", base.DEC, nil, 0, "×0.01")
-f.roll                            = ProtoField.int16("seatrac.attitude.roll", "Roll", base.DEC, nil, 0, "×0.01")
-f.min_roll                        = ProtoField.int16("seatrac.attitude.min_roll", "Min Roll", base.DEC, nil, 0, "×0.01")
-f.max_roll                        = ProtoField.int16("seatrac.attitude.max_roll", "Max Roll", base.DEC, nil, 0, "×0.01")
-f.min_heading                     = ProtoField.int16("seatrac.attitude.min_heading", "Min Heading", base.DEC, nil, 0,
-    "×0.01")
-f.max_heading                     = ProtoField.int16("seatrac.attitude.max_heading", "Max Heading", base.DEC, nil, 0,
-    "×0.01")
-
--- GPS fields
-f.latitude                        = ProtoField.double("seatrac.gps.latitude", "Latitude", base.NONE, nil, "radians")
-f.longitude                       = ProtoField.double("seatrac.gps.longitude", "Longitude", base.NONE, nil, "radians")
-f.kts                             = ProtoField.uint16("seatrac.gps.kts", "Speed over Ground", base.DEC, nil, 0, "×0.002")
-f.current_kts                     = ProtoField.uint16("seatrac.gps.current_kts", "Current Speed", base.DEC, nil, 0,
-    "×0.002")
-f.current_heading                 = ProtoField.uint16("seatrac.gps.current_heading", "Current Heading", base.DEC, nil, 0,
-    "×0.01")
-f.wind_kts                        = ProtoField.uint16("seatrac.gps.wind_kts", "Wind Speed", base.DEC, nil, 0, "×0.002")
-f.wind_heading                    = ProtoField.uint16("seatrac.gps.wind_heading", "Wind Heading", base.DEC, nil, 0,
-    "×0.01")
-
--- IMU fields
-f.roll_gyro                       = ProtoField.int16("seatrac.imu.roll_gyro", "Roll Gyro Rate", base.DEC, nil, 0,
-    "×0.02 deg/sec")
-f.pitch_gyro                      = ProtoField.int16("seatrac.imu.pitch_gyro", "Pitch Gyro Rate", base.DEC, nil, 0,
-    "×0.02 deg/sec")
-f.heading_gyro                    = ProtoField.int16("seatrac.imu.heading_gyro", "Heading Gyro Rate", base.DEC, nil, 0,
-    "×0.02 deg/sec")
-f.accel_x                         = ProtoField.int16("seatrac.imu.accel_x", "Acceleration X", base.DEC, nil, 0,
-    "×0.01 m/s²")
-f.accel_y                         = ProtoField.int16("seatrac.imu.accel_y", "Acceleration Y", base.DEC, nil, 0,
-    "×0.01 m/s²")
-f.accel_z                         = ProtoField.int16("seatrac.imu.accel_z", "Acceleration Z", base.DEC, nil, 0,
-    "×0.01 m/s²")
-f.max_accel_x                     = ProtoField.int16("seatrac.imu.max_accel_x", "Max Accel X", base.DEC, nil, 0,
-    "×0.01 m/s²")
-f.max_accel_y                     = ProtoField.int16("seatrac.imu.max_accel_y", "Max Accel Y", base.DEC, nil, 0,
-    "×0.01 m/s²")
-f.max_accel_z                     = ProtoField.int16("seatrac.imu.max_accel_z", "Max Accel Z", base.DEC, nil, 0,
-    "×0.01 m/s²")
-f.heave                           = ProtoField.int16("seatrac.imu.heave", "Heave", base.DEC, nil, 0, "×0.001 m")
-f.min_z                           = ProtoField.int16("seatrac.imu.min_z", "Min Z", base.DEC, nil, 0, "×0.001 m")
-f.max_z                           = ProtoField.int16("seatrac.imu.max_z", "Max Z", base.DEC, nil, 0, "×0.001 m")
-
--- Wind sensor extra fields
-f.apparent_speed                  = ProtoField.uint16("seatrac.wind.apparent_speed", "Apparent Wind Speed", base.DEC, nil,
-    0,
-    "×0.002")
-f.apparent_angle                  = ProtoField.int16("seatrac.wind.apparent_angle", "Apparent Wind Angle", base.DEC, nil,
-    0,
-    "×0.01")
-f.temperature                     = ProtoField.int16("seatrac.wind.temperature", "Air Temperature", base.DEC, nil, 0,
-    "×0.01 °C")
-f.pressure                        = ProtoField.int16("seatrac.wind.pressure", "Air Pressure", base.DEC, nil, 0,
-    "×0.01 Bar")
-
--- Propulsion fields
-f.prop_state                      = ProtoField.int16("seatrac.prop.state", "Propulsion State", base.DEC,
-    propulsion_states, 0)
-f.target_rpm                      = ProtoField.int16("seatrac.prop.target_rpm", "Target RPM", base.DEC)
-f.target_rudder                   = ProtoField.int16("seatrac.prop.target_rudder", "Target Rudder Angle", base.DEC, nil,
-    0,
-    "×0.01 deg")
-f.actual_rudder                   = ProtoField.int16("seatrac.prop.actual_rudder", "Actual Rudder Angle", base.DEC, nil,
-    0,
-    "×0.01 deg")
-f.actual_rudder_speed             = ProtoField.int16("seatrac.prop.actual_rudder_speed", "Actual Rudder Speed", base.DEC,
-    nil, 0,
-    "×0.01 deg/sec")
-
--- Navigation fields
-f.mission_state                   = ProtoField.int16("seatrac.nav.mission_state", "Mission State", base.DEC,
-    navigator_states)
-f.requested_speed                 = ProtoField.uint16("seatrac.nav.requested_speed", "Requested Speed", base.DEC, nil, 0,
-    "×0.002 kts")
-f.n_waypoints                     = ProtoField.uint16("seatrac.nav.n_waypoints", "Number of Waypoints", base.DEC)
-f.next_wp_index                   = ProtoField.uint16("seatrac.nav.next_wp_index", "Next Waypoint Index", base.HEX)
-f.leg_start_lat                   = ProtoField.double("seatrac.nav.leg_start_lat", "Leg Start Latitude", base.NONE, nil,
-    "radians")
-f.leg_start_long                  = ProtoField.double("seatrac.nav.leg_start_long", "Leg Start Longitude", base.NONE, nil,
-    "radians")
-f.leg_end_lat                     = ProtoField.double("seatrac.nav.leg_end_lat", "Leg End Latitude", base.NONE, nil,
-    "radians")
-f.leg_end_long                    = ProtoField.double("seatrac.nav.leg_end_long", "Leg End Longitude", base.NONE, nil,
-    "radians")
-f.laps_to_do                      = ProtoField.uint16("seatrac.nav.laps_to_do", "Laps To Do", base.DEC)
-f.laps_done                       = ProtoField.uint16("seatrac.nav.laps_done", "Laps Done", base.DEC)
-f.hold_lat                        = ProtoField.double("seatrac.nav.hold_lat", "Hold Latitude", base.NONE, nil, "radians")
-f.hold_long                       = ProtoField.double("seatrac.nav.hold_long", "Hold Longitude", base.NONE, nil,
-    "radians")
-f.hold_rin                        = ProtoField.float("seatrac.nav.hold_rin", "Hold Rin (ft)")
-f.hold_rout                       = ProtoField.float("seatrac.nav.hold_rout", "Hold Rout (ft)")
-f.hold_kts                        = ProtoField.float("seatrac.nav.hold_kts", "Hold Speed (kts)")
-f.hold_time                       = ProtoField.uint32("seatrac.nav.hold_time", "Hold Time (secs)")
-f.alt_wp_active                   = ProtoField.uint8("seatrac.nav.alt_wp_active", "Alternate Waypoint Active")
-f.alt_wp_lat                      = ProtoField.double("seatrac.nav.alt_wp_lat", "Alternate Waypoint Latitude", base.NONE,
-    nil,
-    "radians")
-f.alt_wp_long                     = ProtoField.double("seatrac.nav.alt_wp_long", "Alternate Waypoint Longitude",
-    base.NONE, nil,
-    "radians")
-f.alt_heading_active              = ProtoField.uint8("seatrac.nav.alt_heading_active", "Alternate Heading Active")
-f.alt_heading                     = ProtoField.float("seatrac.nav.alt_heading", "Alternate Heading")
-f.alt_speed_active                = ProtoField.uint8("seatrac.nav.alt_speed_active", "Alternate Speed Active")
-f.alt_speed                       = ProtoField.float("seatrac.nav.alt_speed", "Alternate Speed (kts)")
-
--- Video / Camera fields
-f.camera_location                 = ProtoField.uint8("seatrac.camera.location", "Camera Location", base.DEC,
-    camera_locations)
-f.resolution                      = ProtoField.uint8("seatrac.camera.resolution", "Resolution", base.DEC, resolutions)
-f.period                          = ProtoField.uint16("seatrac.camera.period", "Period", base.DEC)
-f.send_stream                     = ProtoField.uint8("seatrac.camera.send_stream", "Send Stream", base.DEC, send_streams)
-f.nchunks                         = ProtoField.uint16("seatrac.camera.nchunks", "Total Chunks", base.DEC)
-f.chunk                           = ProtoField.uint16("seatrac.camera.chunk", "Chunk Number", base.DEC)
-f.setup_frame_size                = ProtoField.uint16("seatrac.camera.setup_frame_size", "Setup Frame Size", base.DEC)
-f.setup_frame_data                = ProtoField.bytes("seatrac.camera.setup_frame_data", "Setup Frame Data")
-f.strength                        = ProtoField.float("seatrac.camera.strength", "Strength")
-f.zoom                            = ProtoField.float("seatrac.camera.zoom", "Zoom")
-f.camera_height                   = ProtoField.float("seatrac.camera.height", "Camera Height (ft)")
-f.ptz_azimuth                     = ProtoField.float("seatrac.camera.ptz_azimuth", "PTZ Azimuth")
-f.ptz_elevation                   = ProtoField.float("seatrac.camera.ptz_elevation", "PTZ Elevation")
-f.ptz_view_angle                  = ProtoField.float("seatrac.camera.ptz_view_angle", "PTZ View Angle")
-f.image_rotation                  = ProtoField.float("seatrac.camera.image_rotation", "Image Rotation")
-f.image_height                    = ProtoField.float("seatrac.camera.image_height", "Image Height")
-f.image_data_size                 = ProtoField.uint16("seatrac.camera.image_data_size", "Image Data Size", base.DEC)
-f.image_data                      = ProtoField.bytes("seatrac.camera.image_data", "Image Data")
-
--- PTZ fields
-f.ptz_command                     = ProtoField.uint8("seatrac.ptz.command", "PTZ Command", base.DEC, ptz_commands)
-f.ptz_parameter                   = ProtoField.int16("seatrac.ptz.parameter", "PTZ Parameter", base.DEC)
-
 ----------------------------------------
 -- Helper Functions
 ----------------------------------------
@@ -451,6 +256,73 @@ local function tree_add(tree, field, tvb, offset, length)
     local item = tree:add_le(field, tvb(offset, length))
     return offset + length, item
 end
+
+-- Helper function to generate board_sink key
+local function BS(board_id, sink_id)
+    return string.format("%d_%d", board_id, sink_id)
+end
+
+-- Helper function to generate board_sink_func key
+local function BSF(board_id, sink_id, func_id)
+    return string.format("%d_%d_%d", board_id, sink_id, func_id)
+end
+
+----------------------------------------
+-- Common Fields (Header & Shared)
+----------------------------------------
+
+local f = {}
+
+local function PF(field)
+    table.insert(proto.fields, field)
+    return field
+end
+
+
+-- Header fields
+f.sync1                 = PF(ProtoField.uint8("seatrac.sync1", "Sync Byte 1", base.HEX))
+f.sync2                 = PF(ProtoField.uint8("seatrac.sync2", "Sync Byte 2", base.HEX))
+f.length                = PF(ProtoField.uint16("seatrac.length", "Data Length", base.DEC))
+f.relay                 = PF(ProtoField.uint8("seatrac.relay", "Message Relay", base.DEC))
+f.msg_type              = PF(ProtoField.uint8("seatrac.msg_type", "Message Type", base.DEC,
+    invert_enum(MessageType)))
+f.checksum              = PF(ProtoField.uint16("seatrac.checksum", "Checksum", base.HEX))
+
+-- Common fields for all payloads
+f.sink_id               = PF(ProtoField.uint8("seatrac.sink_id", "SinkID", base.DEC, invert_enum(SinkID)))
+f.board_id              = PF(ProtoField.uint8("seatrac.board_id", "BoardID", base.DEC, invert_enum(BoardID)))
+f.func                  = PF(ProtoField.uint8("seatrac.func", "Function", base.DEC))
+f.raw                   = PF(ProtoField.bytes("seatrac.raw", "Raw Data"))
+
+-- Function ID fields for specific combinations
+f.com_switches_func     = PF(ProtoField.uint8("seatrac.com_switches_func", "COM_SWITCHES Function", base.DEC,
+    invert_enum(COM_SWITCHES_FunctionID)))
+f.com_ais_func          = PF(ProtoField.uint8("seatrac.com_ais_func", "COM_AIS Function", base.DEC,
+    invert_enum(COM_AIS_FunctionID)))
+f.pms_switches_func     = PF(ProtoField.uint8("seatrac.pms_switches_func", "PMS_SWITCHES Function", base.DEC,
+    invert_enum(PMS_SWITCHES_FunctionID)))
+f.motor_propulsion_func = PF(ProtoField.uint8("seatrac.motor_propulsion_func", "MOTOR_PROPULSION Function",
+    base.DEC,
+    invert_enum(MOTOR_PROPULSION_FunctionID)))
+f.pc_camera_mgr_func    = PF(ProtoField.uint8("seatrac.pc_camera_mgr_func", "PC_CAMERA_MGR Function", base.DEC,
+    invert_enum(PC_CAMERA_MGR_FunctionID)))
+
+-- Common fields used across multiple message types
+f.new_state             = PF(ProtoField.int32("seatrac.new_state", "New State"))
+f.rudder_angle          = PF(ProtoField.float("seatrac.rudder_angle", "Rudder Angle (deg)"))
+f.rpm                   = PF(ProtoField.float("seatrac.rpm", "RPM"))
+f.heading               = PF(ProtoField.float("seatrac.heading", "Heading"))
+f.speed                 = PF(ProtoField.float("seatrac.speed", "Speed (kts)"))
+
+-- DATETIME structure fields (8 bytes as defined in document)
+f.datetime              = PF(ProtoField.none("seatrac.datetime", "DATETIME"))
+f.datetime_year         = PF(ProtoField.uint16("seatrac.datetime.year", "Year", base.DEC))
+f.datetime_month        = PF(ProtoField.uint8("seatrac.datetime.month", "Month", base.DEC))
+f.datetime_day          = PF(ProtoField.uint8("seatrac.datetime.day", "Day", base.DEC))
+f.datetime_hour         = PF(ProtoField.uint8("seatrac.datetime.hour", "Hour", base.DEC))
+f.datetime_minute       = PF(ProtoField.uint8("seatrac.datetime.minute", "Minute", base.DEC))
+f.datetime_second       = PF(ProtoField.uint8("seatrac.datetime.second", "Second", base.DEC))
+f.datetime_hundredths   = PF(ProtoField.uint8("seatrac.datetime.hundredths", "Hundredths", base.DEC))
 
 -- Parse DATETIME structure (8 bytes, per the interface document)
 local function dissect_datetime(tvb, offset, tree, label)
@@ -485,290 +357,260 @@ local function add_function_field(tvb, tree, offset, board_id, sink_id)
     end
 end
 
--- Helper function to generate board_sink key
-local function BS(board_id, sink_id)
-    return string.format("%d_%d", board_id, sink_id)
-end
-
--- Helper function to generate board_sink_func key
-local function BSF(board_id, sink_id, func_id)
-    return string.format("%d_%d_%d", board_id, sink_id, func_id)
-end
-
--- Handle unknown message gracefully
-local function dissect_unknown_message(tvb, tree)
-    tree:add_expert_info(PI_UNDECODED, PI_NOTE, "Unknown message")
-    return tree_add(tree, f.raw, tvb, 0, tvb:len())
-end
-
 ----------------------------------------
--- Status Reply Handlers (msg type 8)
+-- Status Reply: PMS_BMS (Power Level)
 ----------------------------------------
+-- Fields
+f.pms_bms = {
+    pack_current = PF(ProtoField.int16("seatrac.pms_bms.pack_current", "Pack Current", base.DEC, nil, 0, "×0.002")),
+    load_current = PF(ProtoField.int16("seatrac.pms_bms.load_current", "Load Current", base.DEC, nil, 0, "×0.002")),
+    pack_voltage = PF(ProtoField.uint16("seatrac.pms_bms.pack_voltage", "Pack Voltage", base.DEC, nil, 0, "×0.001")),
+    soc = PF(ProtoField.uint16("seatrac.pms_bms.soc", "SOC%", base.DEC, nil, 0, "×0.002")),
+    unknown = PF(ProtoField.bytes("seatrac.pms_bms.unknown", "Unknown Fields"))
+}
 
--- Handler for PMS_BMS status reply (power level)
+-- Dissector
 local function dissect_status_pms_bms(tvb, tree, offset)
     tree:append_text(" [Power Level]")
     offset = dissect_datetime(tvb, offset, tree, "Timestamp")
     local item
     offset, item = tree_add(tree, f.raw, tvb, offset, 18)
     item:set_text("Unknown Fields (bytes 16–33)")
-    offset = tree_add(tree, f.pack_current, tvb, offset)
-    offset = tree_add(tree, f.load_current, tvb, offset)
-    offset = tree_add(tree, f.pack_voltage, tvb, offset)
-    offset = tree_add(tree, f.soc, tvb, offset)
-    offset = tree_add(tree, f.unknown2, tvb, offset, 4)
+    offset = tree_add(tree, f.pms_bms.pack_current, tvb, offset)
+    offset = tree_add(tree, f.pms_bms.load_current, tvb, offset)
+    offset = tree_add(tree, f.pms_bms.pack_voltage, tvb, offset)
+    offset = tree_add(tree, f.pms_bms.soc, tvb, offset)
+    offset = tree_add(tree, f.pms_bms.unknown, tvb, offset, 4)
     return offset
 end
 
--- Handler for COM_AIS status reply
+----------------------------------------
+-- Status Reply: COM_AIS
+----------------------------------------
+-- Fields
+f.com_ais = {
+    state = PF(ProtoField.uint8("seatrac.com_ais.state", "AIS State", base.DEC,
+        { [0] = "Off", [1] = "On" })),
+    num_targets = PF(ProtoField.uint8("seatrac.com_ais.num_targets", "Number of AIS Targets", base.DEC)),
+    closest_target = PF(ProtoField.float("seatrac.com_ais.closest_target", "Closest AIS Target (nm)")),
+    mmsi = PF(ProtoField.uint32("seatrac.com_ais.mmsi", "MMSI")),
+    speed_over_ground = PF(ProtoField.uint16("seatrac.com_ais.speed_over_ground", "Speed over Ground", base.DEC,
+        nil, 0, "×0.002")),
+    course_over_ground = PF(ProtoField.uint16("seatrac.com_ais.course_over_ground", "Course over Ground", base.DEC,
+        nil, 0, "×0.01")),
+    heading = PF(ProtoField.uint16("seatrac.com_ais.heading", "Heading", base.DEC)),
+    nav_status = PF(ProtoField.uint8("seatrac.com_ais.nav_status", "Navigation Status", base.DEC))
+}
+
+-- Dissector for status reply
 local function dissect_status_com_ais(tvb, tree, offset)
     tree:append_text(" [AIS Status Reply]")
     offset = dissect_datetime(tvb, offset, tree, "Timestamp")
-    offset = tree_add(tree, f.ais_state, tvb, offset)
-    offset = tree_add(tree, f.ais_num_targets, tvb, offset)
-    offset = tree_add(tree, f.ais_closest_target, tvb, offset)
+    offset = tree_add(tree, f.com_ais.state, tvb, offset)
+    offset = tree_add(tree, f.com_ais.num_targets, tvb, offset)
+    offset = tree_add(tree, f.com_ais.closest_target, tvb, offset)
     return offset
 end
 
--- Handler for MOTOR_ATTITUDE status
+-- Dissector for reply
+local function dissect_reply_com_ais(tvb, tree, offset, func_id)
+    tree:append_text(" [COM/AIS Target Update]")
+    offset = dissect_datetime(tvb, offset, tree, "Timestamp")
+    offset = tree_add(tree, f.gps.latitude, tvb, offset)
+    offset = tree_add(tree, f.gps.longitude, tvb, offset)
+    offset = tree_add(tree, f.com_ais.mmsi, tvb, offset)
+    offset = tree_add(tree, f.com_ais.speed_over_ground, tvb, offset)
+    offset = tree_add(tree, f.com_ais.course_over_ground, tvb, offset)
+    offset = tree_add(tree, f.com_ais.heading, tvb, offset)
+    offset = tree_add(tree, f.com_ais.nav_status, tvb, offset)
+    return offset
+end
+
+----------------------------------------
+-- Status Reply: MOTOR_ATTITUDE
+----------------------------------------
+-- Fields
+f.attitude = {
+    pitch = PF(ProtoField.int16("seatrac.attitude.pitch", "Pitch", base.DEC, nil, 0, "×0.01")),
+    min_pitch = PF(ProtoField.int16("seatrac.attitude.min_pitch", "Min Pitch", base.DEC, nil, 0, "×0.01")),
+    max_pitch = PF(ProtoField.int16("seatrac.attitude.max_pitch", "Max Pitch", base.DEC, nil, 0, "×0.01")),
+    roll = PF(ProtoField.int16("seatrac.attitude.roll", "Roll", base.DEC, nil, 0, "×0.01")),
+    min_roll = PF(ProtoField.int16("seatrac.attitude.min_roll", "Min Roll", base.DEC, nil, 0, "×0.01")),
+    max_roll = PF(ProtoField.int16("seatrac.attitude.max_roll", "Max Roll", base.DEC, nil, 0, "×0.01")),
+    heading = PF(ProtoField.int16("seatrac.attitude.heading", "Heading", base.DEC, nil, 0, "×0.01")),
+    min_heading = PF(ProtoField.int16("seatrac.attitude.min_heading", "Min Heading", base.DEC, nil, 0, "×0.01")),
+    max_heading = PF(ProtoField.int16("seatrac.attitude.max_heading", "Max Heading", base.DEC, nil, 0, "×0.01"))
+}
+
+-- Dissector
 local function dissect_status_motor_attitude(tvb, tree, offset)
     tree:append_text(" [Attitude]")
     offset = dissect_datetime(tvb, offset, tree, "Timestamp")
     local item
-    offset, item = tree_add(tree, f.heading, tvb, offset)
+    offset, item = tree_add(tree, f.attitude.heading, tvb, offset)
     item:append_text(" (×0.01)")
-    offset, item = tree_add(tree, f.pitch, tvb, offset)
+    offset, item = tree_add(tree, f.attitude.pitch, tvb, offset)
     item:append_text(" (×0.01)")
-    offset, item = tree_add(tree, f.min_pitch, tvb, offset)
+    offset, item = tree_add(tree, f.attitude.min_pitch, tvb, offset)
     item:append_text(" (×0.01)")
-    offset, item = tree_add(tree, f.max_pitch, tvb, offset)
+    offset, item = tree_add(tree, f.attitude.max_pitch, tvb, offset)
     item:append_text(" (×0.01)")
-    offset, item = tree_add(tree, f.roll, tvb, offset)
+    offset, item = tree_add(tree, f.attitude.roll, tvb, offset)
     item:append_text(" (×0.01)")
-    offset, item = tree_add(tree, f.min_roll, tvb, offset)
+    offset, item = tree_add(tree, f.attitude.min_roll, tvb, offset)
     item:append_text(" (×0.01)")
-    offset, item = tree_add(tree, f.max_roll, tvb, offset)
+    offset, item = tree_add(tree, f.attitude.max_roll, tvb, offset)
     item:append_text(" (×0.01)")
-    offset, item = tree_add(tree, f.min_heading, tvb, offset)
+    offset, item = tree_add(tree, f.attitude.min_heading, tvb, offset)
     item:append_text(" (×0.01)")
-    offset, item = tree_add(tree, f.max_heading, tvb, offset)
+    offset, item = tree_add(tree, f.attitude.max_heading, tvb, offset)
     item:append_text(" (×0.01)")
     return offset
 end
 
--- Handler for MOTOR_GPS status
+----------------------------------------
+-- Status Reply: MOTOR_GPS
+----------------------------------------
+-- Fields
+f.gps = {
+    latitude = PF(ProtoField.double("seatrac.gps.latitude", "Latitude", base.NONE, nil, "radians")),
+    longitude = PF(ProtoField.double("seatrac.gps.longitude", "Longitude", base.NONE, nil, "radians")),
+    kts = PF(ProtoField.uint16("seatrac.gps.kts", "Speed over Ground", base.DEC, nil, 0, "×0.002")),
+    heading = PF(ProtoField.uint16("seatrac.gps.heading", "Heading", base.DEC, nil, 0, "×0.01")),
+    current_kts = PF(ProtoField.uint16("seatrac.gps.current_kts", "Current Speed", base.DEC, nil, 0, "×0.002")),
+    current_heading = PF(ProtoField.uint16("seatrac.gps.current_heading", "Current Heading", base.DEC, nil, 0, "×0.01")),
+    wind_kts = PF(ProtoField.uint16("seatrac.gps.wind_kts", "Wind Speed", base.DEC, nil, 0, "×0.002")),
+    wind_heading = PF(ProtoField.uint16("seatrac.gps.wind_heading", "Wind Heading", base.DEC, nil, 0, "×0.01"))
+}
+
+-- Dissector
 local function dissect_status_motor_gps(tvb, tree, offset)
     tree:append_text(" [GPS]")
     offset = dissect_datetime(tvb, offset, tree, "Timestamp")
-    offset = tree_add(tree, f.latitude, tvb, offset)
-    offset = tree_add(tree, f.longitude, tvb, offset)
-    offset = tree_add(tree, f.kts, tvb, offset)
+    offset = tree_add(tree, f.gps.latitude, tvb, offset)
+    offset = tree_add(tree, f.gps.longitude, tvb, offset)
+    offset = tree_add(tree, f.gps.kts, tvb, offset)
     local item
-    offset, item = tree_add(tree, f.heading, tvb, offset)
+    offset, item = tree_add(tree, f.gps.heading, tvb, offset)
     item:append_text(" (×0.01)")
-    offset = tree_add(tree, f.current_kts, tvb, offset)
-    offset = tree_add(tree, f.current_heading, tvb, offset)
-    offset = tree_add(tree, f.wind_kts, tvb, offset)
-    offset = tree_add(tree, f.wind_heading, tvb, offset)
+    offset = tree_add(tree, f.gps.current_kts, tvb, offset)
+    offset = tree_add(tree, f.gps.current_heading, tvb, offset)
+    offset = tree_add(tree, f.gps.wind_kts, tvb, offset)
+    offset = tree_add(tree, f.gps.wind_heading, tvb, offset)
     return offset
 end
 
--- Handler for MOTOR_IMU status
+----------------------------------------
+-- Status Reply: MOTOR_IMU
+----------------------------------------
+-- Fields
+f.imu = {
+    roll_gyro = PF(ProtoField.int16("seatrac.imu.roll_gyro", "Roll Gyro Rate", base.DEC, nil, 0, "×0.02 deg/sec")),
+    pitch_gyro = PF(ProtoField.int16("seatrac.imu.pitch_gyro", "Pitch Gyro Rate", base.DEC, nil, 0, "×0.02 deg/sec")),
+    heading_gyro = PF(ProtoField.int16("seatrac.imu.heading_gyro", "Heading Gyro Rate", base.DEC, nil, 0, "×0.02 deg/sec")),
+    accel_x = PF(ProtoField.int16("seatrac.imu.accel_x", "Acceleration X", base.DEC, nil, 0, "×0.01 m/s²")),
+    accel_y = PF(ProtoField.int16("seatrac.imu.accel_y", "Acceleration Y", base.DEC, nil, 0, "×0.01 m/s²")),
+    accel_z = PF(ProtoField.int16("seatrac.imu.accel_z", "Acceleration Z", base.DEC, nil, 0, "×0.01 m/s²")),
+    max_accel_x = PF(ProtoField.int16("seatrac.imu.max_accel_x", "Max Accel X", base.DEC, nil, 0, "×0.01 m/s²")),
+    max_accel_y = PF(ProtoField.int16("seatrac.imu.max_accel_y", "Max Accel Y", base.DEC, nil, 0, "×0.01 m/s²")),
+    max_accel_z = PF(ProtoField.int16("seatrac.imu.max_accel_z", "Max Accel Z", base.DEC, nil, 0, "×0.01 m/s²")),
+    heave = PF(ProtoField.int16("seatrac.imu.heave", "Heave", base.DEC, nil, 0, "×0.001 m")),
+    min_z = PF(ProtoField.int16("seatrac.imu.min_z", "Min Z", base.DEC, nil, 0, "×0.001 m")),
+    max_z = PF(ProtoField.int16("seatrac.imu.max_z", "Max Z", base.DEC, nil, 0, "×0.001 m"))
+}
+
+-- Dissector
 local function dissect_status_motor_imu(tvb, tree, offset)
     tree:append_text(" [IMU]")
     offset = dissect_datetime(tvb, offset, tree, "Timestamp")
     local item
-    offset, item = tree_add(tree, f.roll, tvb, offset)
+    offset, item = tree_add(tree, f.attitude.roll, tvb, offset)
     item:append_text(" (×0.01)")
-    offset, item = tree_add(tree, f.min_roll, tvb, offset)
+    offset, item = tree_add(tree, f.attitude.min_roll, tvb, offset)
     item:append_text(" (×0.01)")
-    offset, item = tree_add(tree, f.max_roll, tvb, offset)
+    offset, item = tree_add(tree, f.attitude.max_roll, tvb, offset)
     item:append_text(" (×0.01)")
-    offset, item = tree_add(tree, f.pitch, tvb, offset)
+    offset, item = tree_add(tree, f.attitude.pitch, tvb, offset)
     item:append_text(" (×0.01)")
-    offset, item = tree_add(tree, f.min_pitch, tvb, offset)
+    offset, item = tree_add(tree, f.attitude.min_pitch, tvb, offset)
     item:append_text(" (×0.01)")
-    offset, item = tree_add(tree, f.max_pitch, tvb, offset)
+    offset, item = tree_add(tree, f.attitude.max_pitch, tvb, offset)
     item:append_text(" (×0.01)")
-    offset, item = tree_add(tree, f.heading, tvb, offset)
+    offset, item = tree_add(tree, f.attitude.heading, tvb, offset)
     item:append_text(" (×0.01)")
-    offset = tree_add(tree, f.roll_gyro, tvb, offset)
-    offset = tree_add(tree, f.pitch_gyro, tvb, offset)
-    offset = tree_add(tree, f.heading_gyro, tvb, offset)
-    offset = tree_add(tree, f.accel_x, tvb, offset)
-    offset = tree_add(tree, f.accel_y, tvb, offset)
-    offset = tree_add(tree, f.accel_z, tvb, offset)
-    offset = tree_add(tree, f.max_accel_x, tvb, offset)
-    offset = tree_add(tree, f.max_accel_y, tvb, offset)
-    offset = tree_add(tree, f.max_accel_z, tvb, offset)
-    offset = tree_add(tree, f.heave, tvb, offset)
-    offset = tree_add(tree, f.min_z, tvb, offset)
-    offset = tree_add(tree, f.max_z, tvb, offset)
-    offset, item = tree_add(tree, f.min_heading, tvb, offset)
+    offset = tree_add(tree, f.imu.roll_gyro, tvb, offset)
+    offset = tree_add(tree, f.imu.pitch_gyro, tvb, offset)
+    offset = tree_add(tree, f.imu.heading_gyro, tvb, offset)
+    offset = tree_add(tree, f.imu.accel_x, tvb, offset)
+    offset = tree_add(tree, f.imu.accel_y, tvb, offset)
+    offset = tree_add(tree, f.imu.accel_z, tvb, offset)
+    offset = tree_add(tree, f.imu.max_accel_x, tvb, offset)
+    offset = tree_add(tree, f.imu.max_accel_y, tvb, offset)
+    offset = tree_add(tree, f.imu.max_accel_z, tvb, offset)
+    offset = tree_add(tree, f.imu.heave, tvb, offset)
+    offset = tree_add(tree, f.imu.min_z, tvb, offset)
+    offset = tree_add(tree, f.imu.max_z, tvb, offset)
+    offset, item = tree_add(tree, f.attitude.min_heading, tvb, offset)
     item:append_text(" (×0.01)")
-    offset, item = tree_add(tree, f.max_heading, tvb, offset)
+    offset, item = tree_add(tree, f.attitude.max_heading, tvb, offset)
     item:append_text(" (×0.01)")
     return offset
 end
 
--- Handler for MOTOR_WIND status
+----------------------------------------
+-- Status Reply: MOTOR_WIND
+----------------------------------------
+-- Fields
+f.wind = {
+    apparent_speed = PF(ProtoField.uint16("seatrac.wind.apparent_speed", "Apparent Wind Speed", base.DEC, nil, 0,
+        "×0.002")),
+    apparent_angle = PF(ProtoField.int16("seatrac.wind.apparent_angle", "Apparent Wind Angle", base.DEC, nil, 0, "×0.01")),
+    temperature = PF(ProtoField.int16("seatrac.wind.temperature", "Air Temperature", base.DEC, nil, 0, "×0.01 °C")),
+    pressure = PF(ProtoField.int16("seatrac.wind.pressure", "Air Pressure", base.DEC, nil, 0, "×0.01 Bar"))
+}
+
+-- Dissector
 local function dissect_status_motor_wind(tvb, tree, offset)
     tree:append_text(" [Wind Sensor]")
     offset = dissect_datetime(tvb, offset, tree, "Timestamp")
-    offset = tree_add(tree, f.apparent_speed, tvb, offset)
-    offset = tree_add(tree, f.apparent_angle, tvb, offset)
-    offset = tree_add(tree, f.temperature, tvb, offset)
-    offset = tree_add(tree, f.pressure, tvb, offset)
+    offset = tree_add(tree, f.wind.apparent_speed, tvb, offset)
+    offset = tree_add(tree, f.wind.apparent_angle, tvb, offset)
+    offset = tree_add(tree, f.wind.temperature, tvb, offset)
+    offset = tree_add(tree, f.wind.pressure, tvb, offset)
     return offset
 end
 
--- Handler for MOTOR_PROPULSION status
+----------------------------------------
+-- Status Reply: MOTOR_PROPULSION
+----------------------------------------
+-- Fields
+f.prop = {
+    state = PF(ProtoField.int16("seatrac.prop.state", "Propulsion State", base.DEC, propulsion_states, 0)),
+    target_rpm = PF(ProtoField.int16("seatrac.prop.target_rpm", "Target RPM", base.DEC)),
+    target_rudder = PF(ProtoField.int16("seatrac.prop.target_rudder", "Target Rudder Angle", base.DEC, nil, 0,
+        "×0.01 deg")),
+    target_heading = PF(ProtoField.int16("seatrac.prop.target_heading", "Target Heading", base.DEC, nil, 0, "×0.01 deg")),
+    actual_rudder = PF(ProtoField.int16("seatrac.prop.actual_rudder", "Actual Rudder Angle", base.DEC, nil, 0,
+        "×0.01 deg")),
+    actual_rudder_speed = PF(ProtoField.int16("seatrac.prop.actual_rudder_speed", "Actual Rudder Speed", base.DEC, nil, 0,
+        "×0.01 deg/sec"))
+}
+
+-- Dissector
 local function dissect_status_motor_propulsion(tvb, tree, offset)
     tree:append_text(" [Propulsion]")
     offset = dissect_datetime(tvb, offset, tree, "Timestamp")
-    offset = tree_add(tree, f.prop_state, tvb, offset)
-    offset = tree_add(tree, f.target_rpm, tvb, offset)
-    offset = tree_add(tree, f.target_rudder, tvb, offset)
-    offset = tree_add(tree, f.target_heading, tvb, offset)
+    offset = tree_add(tree, f.prop.state, tvb, offset)
+    offset = tree_add(tree, f.prop.target_rpm, tvb, offset)
+    offset = tree_add(tree, f.prop.target_rudder, tvb, offset)
+    offset = tree_add(tree, f.prop.target_heading, tvb, offset)
     offset = offset + 6 -- skip reserved bytes (3 shorts)
-    offset = tree_add(tree, f.actual_rudder, tvb, offset)
-    offset = tree_add(tree, f.actual_rudder_speed, tvb, offset)
+    offset = tree_add(tree, f.prop.actual_rudder, tvb, offset)
+    offset = tree_add(tree, f.prop.actual_rudder_speed, tvb, offset)
     return offset
 end
 
--- Handler for MOTOR_NAVIGATOR status
-local function dissect_status_motor_navigator(tvb, tree, offset)
-    tree:append_text(" [Navigation]")
-    offset = dissect_datetime(tvb, offset, tree, "Timestamp")
-    offset = tree_add(tree, f.mission_state, tvb, offset)
-    offset = tree_add(tree, f.requested_speed, tvb, offset)
-    offset = tree_add(tree, f.target_rpm, tvb, offset)
-    offset = tree_add(tree, f.n_waypoints, tvb, offset)
-    offset = tree_add(tree, f.next_wp_index, tvb, offset)
-    if tvb:len() - offset >= 32 then
-        offset = tree_add(tree, f.leg_start_lat, tvb, offset)
-        offset = tree_add(tree, f.leg_start_long, tvb, offset)
-        offset = tree_add(tree, f.leg_end_lat, tvb, offset)
-        offset = tree_add(tree, f.leg_end_long, tvb, offset)
-    end
-    if tvb:len() - offset >= 4 then
-        offset = tree_add(tree, f.laps_to_do, tvb, offset)
-        offset = tree_add(tree, f.laps_done, tvb, offset)
-    end
-    -- Additional fields if holding (mission state == 6) or running a mission (state == 7)
-    if tvb:len() - offset >= 8 + 8 + 4 + 4 + 4 then
-        offset = tree_add(tree, f.hold_lat, tvb, offset)
-        offset = tree_add(tree, f.hold_long, tvb, offset)
-        offset = tree_add(tree, f.hold_rin, tvb, offset)
-        offset = tree_add(tree, f.hold_rout, tvb, offset)
-        offset = tree_add(tree, f.hold_kts, tvb, offset)
-    end
-    if tvb:len() - offset >= 4 + 4 + 1 + 16 + 1 + 4 + 1 + 4 then
-        offset = tree_add(tree, f.hold_time, tvb, offset)
-        offset = tree_add(tree, f.hold_rout, tvb, offset)
-        offset = tree_add(tree, f.alt_wp_active, tvb, offset)
-        offset = tree_add(tree, f.alt_wp_lat, tvb, offset)
-        offset = tree_add(tree, f.alt_wp_long, tvb, offset)
-        offset = tree_add(tree, f.alt_heading_active, tvb, offset)
-        offset = tree_add(tree, f.alt_heading, tvb, offset)
-        offset = tree_add(tree, f.alt_speed_active, tvb, offset)
-        offset = tree_add(tree, f.alt_speed, tvb, offset)
-    end
-    return offset
-end
-
-----------------------------------------
--- Reply Handlers (msg type 10)
-----------------------------------------
-
--- Handler for COM_AIS reply
-local function dissect_reply_com_ais(tvb, tree, offset, func_id)
-    tree:append_text(" [COM/AIS Target Update]")
-    offset = dissect_datetime(tvb, offset, tree, "Timestamp")
-    offset = tree_add(tree, f.latitude, tvb, offset)
-    offset = tree_add(tree, f.longitude, tvb, offset)
-    offset = tree_add(tree, f.ais_mmsi, tvb, offset)
-    offset = tree_add(tree, f.ais_speed_over_ground, tvb, offset)
-    offset = tree_add(tree, f.ais_course_over_ground, tvb, offset)
-    offset = tree_add(tree, f.ais_heading, tvb, offset)
-    offset = tree_add(tree, f.ais_nav_status, tvb, offset)
-    return offset
-end
-
--- Handler for PC_CAMERA_MGR IMAGE_DATA_START reply
-local function dissect_reply_pc_camera_mgr_image_data(tvb, tree, offset, func_id)
-    tree:append_text(" [PC/Camera Image Data Start]")
-    offset = tree_add(tree, f.camera_location, tvb, offset)
-    offset = tree_add(tree, f.send_stream, tvb, offset)
-    offset = tree_add(tree, f.nchunks, tvb, offset)
-    offset = tree_add(tree, f.chunk, tvb, offset)
-    if tvb:len() - offset >= 2 then
-        local next_field = tvb(offset, 2):le_uint()
-        if next_field > 0 and next_field < 10000 then
-            tree:append_text(" [H.264 Setup Frame]")
-            offset = tree_add(tree, f.setup_frame_size, tvb, offset)
-            local item
-            offset, item = tree_add(tree, f.setup_frame_data, tvb, offset, next_field)
-        else
-            tree:append_text(" [H.264 Image Frame]")
-            offset = tree_add(tree, f.image_data_size, tvb, offset)
-            local data_len = tvb(offset - 2, 2):le_uint()
-            local item
-            offset, item = tree_add(tree, f.image_data, tvb, offset, data_len)
-        end
-    end
-    return offset
-end
-
-----------------------------------------
--- Command Handlers (msg type 11)
-----------------------------------------
-
--- Handlers for PC_CAMERA_MGR commands
-local function dissect_command_pc_camera_mgr_start(tvb, tree, offset, func_id)
-    tree:append_text(" [PC/Camera Start Stream]")
-    offset = tree_add(tree, f.camera_location, tvb, offset)
-    offset = tree_add(tree, f.resolution, tvb, offset)
-    offset = tree_add(tree, f.period, tvb, offset)
-    offset = tree_add(tree, f.send_stream, tvb, offset)
-    return offset
-end
-
-local function dissect_command_pc_camera_mgr_stop(tvb, tree, offset, func_id)
-    tree:append_text(" [PC/Camera Stop Stream Specific]")
-    offset = tree_add(tree, f.camera_location, tvb, offset)
-    offset = tree_add(tree, f.send_stream, tvb, offset)
-    return offset
-end
-
-local function dissect_command_pc_camera_mgr_stop_all(tvb, tree, offset, func_id)
-    tree:append_text(" [PC/Camera Stop All Streams]")
-    return offset
-end
-
-local function dissect_command_pc_camera_mgr_ptz(tvb, tree, offset, func_id)
-    tree:append_text(" [PC/Camera PTZ Command]")
-    offset = tree_add(tree, f.ptz_command, tvb, offset)
-    offset = tree_add(tree, f.ptz_parameter, tvb, offset)
-    return offset
-end
-
--- Handlers for MOTOR_NAVIGATOR commands
-local function dissect_command_motor_navigator_change_state(tvb, tree, offset, func_id)
-    tree:append_text(" [MOTOR/Navigation Change State]")
-    offset = tree_add(tree, f.new_state, tvb, offset, 4)
-    return offset
-end
-
-local function dissect_command_motor_navigator_move_to_point(tvb, tree, offset, func_id)
-    tree:append_text(" [MOTOR/Navigation Move to Point]")
-    offset = tree_add(tree, f.latitude, tvb, offset)
-    offset = tree_add(tree, f.longitude, tvb, offset)
-    offset = tree_add(tree, f.speed, tvb, offset)
-    return offset
-end
-
--- Handlers for MOTOR_PROPULSION commands
+-- MOTOR_PROPULSION command handlers
 local function dissect_command_motor_propulsion_rudder_angle_rpm(tvb, tree, offset, func_id)
     tree:append_text(" [MOTOR/Propulsion Rudder Angle and RPM]")
     offset = tree_add(tree, f.rudder_angle, tvb, offset, 4)
@@ -784,14 +626,194 @@ local function dissect_command_motor_propulsion_heading_rpm(tvb, tree, offset, f
 end
 
 ----------------------------------------
+-- Status Reply & Command: MOTOR_NAVIGATOR
+----------------------------------------
+-- Fields
+f.nav = {
+    mission_state = PF(ProtoField.int16("seatrac.nav.mission_state", "Mission State", base.DEC, navigator_states)),
+    requested_speed = PF(ProtoField.uint16("seatrac.nav.requested_speed", "Requested Speed", base.DEC, nil, 0,
+        "×0.002 kts")),
+    target_rpm = PF(ProtoField.uint16("seatrac.nav.target_rpm", "Target RPM", base.DEC)),
+    n_waypoints = PF(ProtoField.uint16("seatrac.nav.n_waypoints", "Number of Waypoints", base.DEC)),
+    next_wp_index = PF(ProtoField.uint16("seatrac.nav.next_wp_index", "Next Waypoint Index", base.HEX)),
+    leg_start_lat = PF(ProtoField.double("seatrac.nav.leg_start_lat", "Leg Start Latitude", base.NONE, nil, "radians")),
+    leg_start_long = PF(ProtoField.double("seatrac.nav.leg_start_long", "Leg Start Longitude", base.NONE, nil, "radians")),
+    leg_end_lat = PF(ProtoField.double("seatrac.nav.leg_end_lat", "Leg End Latitude", base.NONE, nil, "radians")),
+    leg_end_long = PF(ProtoField.double("seatrac.nav.leg_end_long", "Leg End Longitude", base.NONE, nil, "radians")),
+    laps_to_do = PF(ProtoField.uint16("seatrac.nav.laps_to_do", "Laps To Do", base.DEC)),
+    laps_done = PF(ProtoField.uint16("seatrac.nav.laps_done", "Laps Done", base.DEC)),
+    hold_lat = PF(ProtoField.double("seatrac.nav.hold_lat", "Hold Latitude", base.NONE, nil, "radians")),
+    hold_long = PF(ProtoField.double("seatrac.nav.hold_long", "Hold Longitude", base.NONE, nil, "radians")),
+    hold_rin = PF(ProtoField.float("seatrac.nav.hold_rin", "Hold Rin (ft)")),
+    hold_rout = PF(ProtoField.float("seatrac.nav.hold_rout", "Hold Rout (ft)")),
+    hold_kts = PF(ProtoField.float("seatrac.nav.hold_kts", "Hold Speed (kts)")),
+    hold_time = PF(ProtoField.uint32("seatrac.nav.hold_time", "Hold Time (secs)")),
+    alt_wp_active = PF(ProtoField.uint8("seatrac.nav.alt_wp_active", "Alternate Waypoint Active")),
+    alt_wp_lat = PF(ProtoField.double("seatrac.nav.alt_wp_lat", "Alternate Waypoint Latitude", base.NONE, nil, "radians")),
+    alt_wp_long = PF(ProtoField.double("seatrac.nav.alt_wp_long", "Alternate Waypoint Longitude", base.NONE, nil,
+        "radians")),
+    alt_heading_active = PF(ProtoField.uint8("seatrac.nav.alt_heading_active", "Alternate Heading Active")),
+    alt_heading = PF(ProtoField.float("seatrac.nav.alt_heading", "Alternate Heading")),
+    alt_speed_active = PF(ProtoField.uint8("seatrac.nav.alt_speed_active", "Alternate Speed Active")),
+    alt_speed = PF(ProtoField.float("seatrac.nav.alt_speed", "Alternate Speed (kts)"))
+}
+
+-- Status Reply Dissector
+local function dissect_status_motor_navigator(tvb, tree, offset)
+    tree:append_text(" [Navigation]")
+    offset = dissect_datetime(tvb, offset, tree, "Timestamp")
+    offset = tree_add(tree, f.nav.mission_state, tvb, offset)
+    offset = tree_add(tree, f.nav.requested_speed, tvb, offset)
+    offset = tree_add(tree, f.nav.target_rpm, tvb, offset)
+    offset = tree_add(tree, f.nav.n_waypoints, tvb, offset)
+    offset = tree_add(tree, f.nav.next_wp_index, tvb, offset)
+    if tvb:len() - offset >= 32 then
+        offset = tree_add(tree, f.nav.leg_start_lat, tvb, offset)
+        offset = tree_add(tree, f.nav.leg_start_long, tvb, offset)
+        offset = tree_add(tree, f.nav.leg_end_lat, tvb, offset)
+        offset = tree_add(tree, f.nav.leg_end_long, tvb, offset)
+    end
+    if tvb:len() - offset >= 4 then
+        offset = tree_add(tree, f.nav.laps_to_do, tvb, offset)
+        offset = tree_add(tree, f.nav.laps_done, tvb, offset)
+    end
+    -- Additional fields if holding (mission state == 6) or running a mission (state == 7)
+    if tvb:len() - offset >= 8 + 8 + 4 + 4 + 4 then
+        offset = tree_add(tree, f.nav.hold_lat, tvb, offset)
+        offset = tree_add(tree, f.nav.hold_long, tvb, offset)
+        offset = tree_add(tree, f.nav.hold_rin, tvb, offset)
+        offset = tree_add(tree, f.nav.hold_rout, tvb, offset)
+        offset = tree_add(tree, f.nav.hold_kts, tvb, offset)
+    end
+    if tvb:len() - offset >= 4 + 4 + 1 + 16 + 1 + 4 + 1 + 4 then
+        offset = tree_add(tree, f.nav.hold_time, tvb, offset)
+        offset = tree_add(tree, f.nav.hold_rout, tvb, offset)
+        offset = tree_add(tree, f.nav.alt_wp_active, tvb, offset)
+        offset = tree_add(tree, f.nav.alt_wp_lat, tvb, offset)
+        offset = tree_add(tree, f.nav.alt_wp_long, tvb, offset)
+        offset = tree_add(tree, f.nav.alt_heading_active, tvb, offset)
+        offset = tree_add(tree, f.nav.alt_heading, tvb, offset)
+        offset = tree_add(tree, f.nav.alt_speed_active, tvb, offset)
+        offset = tree_add(tree, f.nav.alt_speed, tvb, offset)
+    end
+    return offset
+end
+
+-- Command Handlers
+local function dissect_command_motor_navigator_change_state(tvb, tree, offset, func_id)
+    tree:append_text(" [MOTOR/Navigation Change State]")
+    offset = tree_add(tree, f.new_state, tvb, offset, 4)
+    return offset
+end
+
+local function dissect_command_motor_navigator_move_to_point(tvb, tree, offset, func_id)
+    tree:append_text(" [MOTOR/Navigation Move to Point]")
+    offset = tree_add(tree, f.gps.latitude, tvb, offset)
+    offset = tree_add(tree, f.gps.longitude, tvb, offset)
+    offset = tree_add(tree, f.speed, tvb, offset)
+    return offset
+end
+
+----------------------------------------
+-- PC_CAMERA_MGR Commands and Replies
+----------------------------------------
+-- Fields
+f.camera = {
+    location = PF(ProtoField.uint8("seatrac.camera.location", "Camera Location", base.DEC, camera_locations)),
+    resolution = PF(ProtoField.uint8("seatrac.camera.resolution", "Resolution", base.DEC, resolutions)),
+    period = PF(ProtoField.uint16("seatrac.camera.period", "Period", base.DEC)),
+    send_stream = PF(ProtoField.uint8("seatrac.camera.send_stream", "Send Stream", base.DEC, send_streams)),
+    nchunks = PF(ProtoField.uint16("seatrac.camera.nchunks", "Total Chunks", base.DEC)),
+    chunk = PF(ProtoField.uint16("seatrac.camera.chunk", "Chunk Number", base.DEC)),
+    setup_frame_size = PF(ProtoField.uint16("seatrac.camera.setup_frame_size", "Setup Frame Size", base.DEC)),
+    setup_frame_data = PF(ProtoField.bytes("seatrac.camera.setup_frame_data", "Setup Frame Data")),
+    strength = PF(ProtoField.float("seatrac.camera.strength", "Strength")),
+    zoom = PF(ProtoField.float("seatrac.camera.zoom", "Zoom")),
+    height = PF(ProtoField.float("seatrac.camera.height", "Camera Height (ft)")),
+    ptz_azimuth = PF(ProtoField.float("seatrac.camera.ptz_azimuth", "PTZ Azimuth")),
+    ptz_elevation = PF(ProtoField.float("seatrac.camera.ptz_elevation", "PTZ Elevation")),
+    ptz_view_angle = PF(ProtoField.float("seatrac.camera.ptz_view_angle", "PTZ View Angle")),
+    image_rotation = PF(ProtoField.float("seatrac.camera.image_rotation", "Image Rotation")),
+    image_height = PF(ProtoField.float("seatrac.camera.image_height", "Image Height")),
+    image_data_size = PF(ProtoField.uint16("seatrac.camera.image_data_size", "Image Data Size", base.DEC)),
+    image_data = PF(ProtoField.bytes("seatrac.camera.image_data", "Image Data"))
+}
+
+-- PTZ fields
+f.ptz = {
+    command = PF(ProtoField.uint8("seatrac.ptz.command", "PTZ Command", base.DEC, ptz_commands)),
+    parameter = PF(ProtoField.int16("seatrac.ptz.parameter", "PTZ Parameter", base.DEC))
+}
+
+-- Command Handlers
+local function dissect_command_pc_camera_mgr_start(tvb, tree, offset, func_id)
+    tree:append_text(" [PC/Camera Start Stream]")
+    offset = tree_add(tree, f.camera.location, tvb, offset)
+    offset = tree_add(tree, f.camera.resolution, tvb, offset)
+    offset = tree_add(tree, f.camera.period, tvb, offset)
+    offset = tree_add(tree, f.camera.send_stream, tvb, offset)
+    return offset
+end
+
+local function dissect_command_pc_camera_mgr_stop(tvb, tree, offset, func_id)
+    tree:append_text(" [PC/Camera Stop Stream Specific]")
+    offset = tree_add(tree, f.camera.location, tvb, offset)
+    offset = tree_add(tree, f.camera.send_stream, tvb, offset)
+    return offset
+end
+
+local function dissect_command_pc_camera_mgr_stop_all(tvb, tree, offset, func_id)
+    tree:append_text(" [PC/Camera Stop All Streams]")
+    return offset
+end
+
+local function dissect_command_pc_camera_mgr_ptz(tvb, tree, offset, func_id)
+    tree:append_text(" [PC/Camera PTZ Command]")
+    offset = tree_add(tree, f.ptz.command, tvb, offset)
+    offset = tree_add(tree, f.ptz.parameter, tvb, offset)
+    return offset
+end
+
+-- Reply Handlers
+local function dissect_reply_pc_camera_mgr_image_data(tvb, tree, offset, func_id)
+    tree:append_text(" [PC/Camera Image Data Start]")
+    offset = tree_add(tree, f.camera.location, tvb, offset)
+    offset = tree_add(tree, f.camera.send_stream, tvb, offset)
+    offset = tree_add(tree, f.camera.nchunks, tvb, offset)
+    offset = tree_add(tree, f.camera.chunk, tvb, offset)
+    if tvb:len() - offset >= 2 then
+        local next_field = tvb(offset, 2):le_uint()
+        if next_field > 0 and next_field < 10000 then
+            tree:append_text(" [H.264 Setup Frame]")
+            offset = tree_add(tree, f.camera.setup_frame_size, tvb, offset)
+            local item
+            offset, item = tree_add(tree, f.camera.setup_frame_data, tvb, offset, next_field)
+        else
+            tree:append_text(" [H.264 Image Frame]")
+            offset = tree_add(tree, f.camera.image_data_size, tvb, offset)
+            local data_len = tvb(offset - 2, 2):le_uint()
+            local item
+            offset, item = tree_add(tree, f.camera.image_data, tvb, offset, data_len)
+        end
+    end
+    return offset
+end
+
+----------------------------------------
 -- Main Dispatcher Functions
 ----------------------------------------
 
--- Dispatch for Status Request (msg type 7) – minimal example.
+-- Handle unknown message gracefully
+local function dissect_unknown_message(tvb, tree, offset)
+    tree:add_expert_info(PI_UNDECODED, PI_NOTE, "Unknown message")
+    offset = offset or 0
+    return tree_add(tree, f.raw, tvb, offset, tvb:len() - offset)
+end
+
+-- Dispatch for Status Request (msg type 7)
 local function dissect_status_request(tvb, tree)
     tree:append_text(" [Status Request]")
-    -- (No additional fields defined in the document for Status Request.)
-    return tree_add(tree, f.raw, tvb, offset, tvb:len())
+    return dissect_unknown_message(tvb, tree, 0)
 end
 
 -- Dispatch for Status Reply (msg type 8)
@@ -822,7 +844,7 @@ local function dissect_status_reply(tvb, tree)
     tree:add_expert_info(PI_UNDECODED, PI_NOTE, "Unknown Status Reply SinkID: " .. sink_id)
 end
 
--- Dispatch for Request (msg type 9) – for brevity we show raw payload.
+-- Dispatch for Request (msg type 9)
 local function dissect_request(tvb, tree)
     tree:append_text(" [Request]")
     return tree_add(tree, f.raw, tvb, 0, tvb:len())
@@ -857,7 +879,7 @@ local function dissect_reply(tvb, tree)
         return handler(tvb, tree, offset, func_id)
     end
 
-    return dissect_unknown_message(tvb, tree)
+    return dissect_unknown_message(tvb, tree, offset)
 end
 
 -- Dispatch for Command (msg type 11)
@@ -902,7 +924,7 @@ local function dissect_command(tvb, tree)
         return handler(tvb, tree, offset, func_id)
     end
 
-    return dissect_unknown_message(tvb, tree)
+    return dissect_unknown_message(tvb, tree, offset)
 end
 
 ----------------------------------------
