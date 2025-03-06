@@ -654,7 +654,7 @@ function proto.dissector(tvb, pinfo, tree)
     subtree:add(f.sync1, tvb(offset, 1)); offset = offset + 1
     subtree:add(f.sync2, tvb(offset, 1)); offset = offset + 1
     local data_length = tvb(offset, 2):le_uint()
-    subtree:add(f.length, tvb(offset, 2)); offset = offset + 2
+    subtree:add_le(f.length, tvb(offset, 2)); offset = offset + 2
     subtree:add(f.relay, tvb(offset, 1)); offset = offset + 1
     local mtype = tvb(offset, 1):uint()
     subtree:add(f.msg_type, tvb(offset, 1)); offset = offset + 1
