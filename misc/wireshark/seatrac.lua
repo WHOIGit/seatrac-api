@@ -251,9 +251,9 @@ f.image_data          = ProtoField.bytes("seatrac.camera.image_data", "Image Dat
 
 -- Parse DATETIME structure (8 bytes, per the interface document)
 local function dissect_datetime(tvb, offset, tree, label)
-    local dt_tree = tree:add(f.datetime, tvb(offset, 8), label or "DATETIME")
+    local dt_tree = tree:add_le(f.datetime, tvb(offset, 8), label or "DATETIME")
     local year = tvb(offset, 2):le_uint() + 1900
-    dt_tree:add(f.datetime_year, tvb(offset, 2)):append_text(" (" .. year .. ")")
+    dt_tree:add_le(f.datetime_year, tvb(offset, 2)):append_text(" (" .. year .. ")")
     offset = offset + 2
     dt_tree:add(f.datetime_month, tvb(offset, 1))
     offset = offset + 1
@@ -290,15 +290,15 @@ local function dissect_status_reply(tvb, tree)
         offset = dissect_datetime(tvb, offset, tree, "Timestamp")
         tree:add(f.raw, tvb(offset, 18)):set_text("Unknown Fields (bytes 16–33)")
         offset = offset + 18
-        tree:add(f.pack_current, tvb(offset, 2))
+        tree:add_le(f.pack_current, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.load_current, tvb(offset, 2))
+        tree:add_le(f.load_current, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.pack_voltage, tvb(offset, 2))
+        tree:add_le(f.pack_voltage, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.soc, tvb(offset, 2))
+        tree:add_le(f.soc, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.unknown2, tvb(offset, 4))
+        tree:add_le(f.unknown2, tvb(offset, 4))
         offset = offset + 4
     elseif sink_id == 26 then
         tree:append_text(" [AIS Status Reply]")
@@ -307,180 +307,180 @@ local function dissect_status_reply(tvb, tree)
         offset = offset + 1
         tree:add(f.ais_num_targets, tvb(offset, 1))
         offset = offset + 1
-        tree:add(f.ais_closest_target, tvb(offset, 4))
+        tree:add_le(f.ais_closest_target, tvb(offset, 4))
         offset = offset + 4
     elseif sink_id == 76 or sink_id == 79 then
         tree:append_text(" [Attitude]")
         offset = dissect_datetime(tvb, offset, tree, "Timestamp")
-        tree:add(f.heading, tvb(offset, 2)):append_text(" (×0.01)")
+        tree:add_le(f.heading, tvb(offset, 2)):append_text(" (×0.01)")
         offset = offset + 2
-        tree:add(f.pitch, tvb(offset, 2)):append_text(" (×0.01)")
+        tree:add_le(f.pitch, tvb(offset, 2)):append_text(" (×0.01)")
         offset = offset + 2
-        tree:add(f.min_pitch, tvb(offset, 2)):append_text(" (×0.01)")
+        tree:add_le(f.min_pitch, tvb(offset, 2)):append_text(" (×0.01)")
         offset = offset + 2
-        tree:add(f.max_pitch, tvb(offset, 2)):append_text(" (×0.01)")
+        tree:add_le(f.max_pitch, tvb(offset, 2)):append_text(" (×0.01)")
         offset = offset + 2
-        tree:add(f.roll, tvb(offset, 2)):append_text(" (×0.01)")
+        tree:add_le(f.roll, tvb(offset, 2)):append_text(" (×0.01)")
         offset = offset + 2
-        tree:add(f.min_roll, tvb(offset, 2)):append_text(" (×0.01)")
+        tree:add_le(f.min_roll, tvb(offset, 2)):append_text(" (×0.01)")
         offset = offset + 2
-        tree:add(f.max_roll, tvb(offset, 2)):append_text(" (×0.01)")
+        tree:add_le(f.max_roll, tvb(offset, 2)):append_text(" (×0.01)")
         offset = offset + 2
-        tree:add(f.min_heading, tvb(offset, 2)):append_text(" (×0.01)")
+        tree:add_le(f.min_heading, tvb(offset, 2)):append_text(" (×0.01)")
         offset = offset + 2
-        tree:add(f.max_heading, tvb(offset, 2)):append_text(" (×0.01)")
+        tree:add_le(f.max_heading, tvb(offset, 2)):append_text(" (×0.01)")
         offset = offset + 2
     elseif sink_id == 77 or sink_id == 80 then
         tree:append_text(" [GPS]")
         offset = dissect_datetime(tvb, offset, tree, "Timestamp")
-        tree:add(f.latitude, tvb(offset, 8))
+        tree:add_le(f.latitude, tvb(offset, 8))
         offset = offset + 8
-        tree:add(f.longitude, tvb(offset, 8))
+        tree:add_le(f.longitude, tvb(offset, 8))
         offset = offset + 8
-        tree:add(f.kts, tvb(offset, 2))
+        tree:add_le(f.kts, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.heading, tvb(offset, 2)):append_text(" (×0.01)")
+        tree:add_le(f.heading, tvb(offset, 2)):append_text(" (×0.01)")
         offset = offset + 2
-        tree:add(f.current_kts, tvb(offset, 2))
+        tree:add_le(f.current_kts, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.current_heading, tvb(offset, 2))
+        tree:add_le(f.current_heading, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.wind_kts, tvb(offset, 2))
+        tree:add_le(f.wind_kts, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.wind_heading, tvb(offset, 2))
+        tree:add_le(f.wind_heading, tvb(offset, 2))
         offset = offset + 2
     elseif sink_id == 86 then
         tree:append_text(" [IMU]")
         offset = dissect_datetime(tvb, offset, tree, "Timestamp")
-        tree:add(f.roll, tvb(offset, 2)):append_text(" (×0.01)")
+        tree:add_le(f.roll, tvb(offset, 2)):append_text(" (×0.01)")
         offset = offset + 2
-        tree:add(f.min_roll, tvb(offset, 2)):append_text(" (×0.01)")
+        tree:add_le(f.min_roll, tvb(offset, 2)):append_text(" (×0.01)")
         offset = offset + 2
-        tree:add(f.max_roll, tvb(offset, 2)):append_text(" (×0.01)")
+        tree:add_le(f.max_roll, tvb(offset, 2)):append_text(" (×0.01)")
         offset = offset + 2
-        tree:add(f.pitch, tvb(offset, 2)):append_text(" (×0.01)")
+        tree:add_le(f.pitch, tvb(offset, 2)):append_text(" (×0.01)")
         offset = offset + 2
-        tree:add(f.min_pitch, tvb(offset, 2)):append_text(" (×0.01)")
+        tree:add_le(f.min_pitch, tvb(offset, 2)):append_text(" (×0.01)")
         offset = offset + 2
-        tree:add(f.max_pitch, tvb(offset, 2)):append_text(" (×0.01)")
+        tree:add_le(f.max_pitch, tvb(offset, 2)):append_text(" (×0.01)")
         offset = offset + 2
-        tree:add(f.heading, tvb(offset, 2)):append_text(" (×0.01)")
+        tree:add_le(f.heading, tvb(offset, 2)):append_text(" (×0.01)")
         offset = offset + 2
-        tree:add(f.roll_gyro, tvb(offset, 2))
+        tree:add_le(f.roll_gyro, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.pitch_gyro, tvb(offset, 2))
+        tree:add_le(f.pitch_gyro, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.heading_gyro, tvb(offset, 2))
+        tree:add_le(f.heading_gyro, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.accel_x, tvb(offset, 2))
+        tree:add_le(f.accel_x, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.accel_y, tvb(offset, 2))
+        tree:add_le(f.accel_y, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.accel_z, tvb(offset, 2))
+        tree:add_le(f.accel_z, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.max_accel_x, tvb(offset, 2))
+        tree:add_le(f.max_accel_x, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.max_accel_y, tvb(offset, 2))
+        tree:add_le(f.max_accel_y, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.max_accel_z, tvb(offset, 2))
+        tree:add_le(f.max_accel_z, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.heave, tvb(offset, 2))
+        tree:add_le(f.heave, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.min_z, tvb(offset, 2))
+        tree:add_le(f.min_z, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.max_z, tvb(offset, 2))
+        tree:add_le(f.max_z, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.min_heading, tvb(offset, 2)):append_text(" (×0.01)")
+        tree:add_le(f.min_heading, tvb(offset, 2)):append_text(" (×0.01)")
         offset = offset + 2
-        tree:add(f.max_heading, tvb(offset, 2)):append_text(" (×0.01)")
+        tree:add_le(f.max_heading, tvb(offset, 2)):append_text(" (×0.01)")
         offset = offset + 2
     elseif sink_id == 78 then
         tree:append_text(" [Wind Sensor]")
         offset = dissect_datetime(tvb, offset, tree, "Timestamp")
-        tree:add(f.apparent_speed, tvb(offset, 2))
+        tree:add_le(f.apparent_speed, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.apparent_angle, tvb(offset, 2))
+        tree:add_le(f.apparent_angle, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.temperature, tvb(offset, 2))
+        tree:add_le(f.temperature, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.pressure, tvb(offset, 2))
+        tree:add_le(f.pressure, tvb(offset, 2))
         offset = offset + 2
     elseif sink_id == 82 then
         tree:append_text(" [Propulsion]")
         offset = dissect_datetime(tvb, offset, tree, "Timestamp")
-        tree:add(f.prop_state, tvb(offset, 2))
+        tree:add_le(f.prop_state, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.target_rpm, tvb(offset, 2))
+        tree:add_le(f.target_rpm, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.target_rudder, tvb(offset, 2))
+        tree:add_le(f.target_rudder, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.target_heading, tvb(offset, 2))
+        tree:add_le(f.target_heading, tvb(offset, 2))
         offset = offset + 2
         offset = offset + 6 -- skip reserved bytes (3 shorts)
-        tree:add(f.actual_rudder, tvb(offset, 2))
+        tree:add_le(f.actual_rudder, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.actual_rudder_speed, tvb(offset, 2))
+        tree:add_le(f.actual_rudder_speed, tvb(offset, 2))
         offset = offset + 2
     elseif sink_id == 83 then
         tree:append_text(" [Navigation]")
         offset = dissect_datetime(tvb, offset, tree, "Timestamp")
-        tree:add(f.mission_state, tvb(offset, 2))
+        tree:add_le(f.mission_state, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.requested_speed, tvb(offset, 2))
+        tree:add_le(f.requested_speed, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.target_rpm, tvb(offset, 2))
+        tree:add_le(f.target_rpm, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.n_waypoints, tvb(offset, 2))
+        tree:add_le(f.n_waypoints, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.next_wp_index, tvb(offset, 2))
+        tree:add_le(f.next_wp_index, tvb(offset, 2))
         offset = offset + 2
         if tvb:len() - offset >= 32 then
-            tree:add(f.leg_start_lat, tvb(offset, 8))
+            tree:add_le(f.leg_start_lat, tvb(offset, 8))
             offset = offset + 8
-            tree:add(f.leg_start_long, tvb(offset, 8))
+            tree:add_le(f.leg_start_long, tvb(offset, 8))
             offset = offset + 8
-            tree:add(f.leg_end_lat, tvb(offset, 8))
+            tree:add_le(f.leg_end_lat, tvb(offset, 8))
             offset = offset + 8
-            tree:add(f.leg_end_long, tvb(offset, 8))
+            tree:add_le(f.leg_end_long, tvb(offset, 8))
             offset = offset + 8
         end
         if tvb:len() - offset >= 4 then
-            tree:add(f.laps_to_do, tvb(offset, 2))
+            tree:add_le(f.laps_to_do, tvb(offset, 2))
             offset = offset + 2
-            tree:add(f.laps_done, tvb(offset, 2))
+            tree:add_le(f.laps_done, tvb(offset, 2))
             offset = offset + 2
         end
         -- Additional fields if holding (mission state == 6) or running a mission (state == 7)
         if tvb:len() - offset >= 8 + 8 + 4 + 4 + 4 then
-            tree:add(f.hold_lat, tvb(offset, 8))
+            tree:add_le(f.hold_lat, tvb(offset, 8))
             offset = offset + 8
-            tree:add(f.hold_long, tvb(offset, 8))
+            tree:add_le(f.hold_long, tvb(offset, 8))
             offset = offset + 8
-            tree:add(f.hold_rin, tvb(offset, 4))
+            tree:add_le(f.hold_rin, tvb(offset, 4))
             offset = offset + 4
-            tree:add(f.hold_rout, tvb(offset, 4))
+            tree:add_le(f.hold_rout, tvb(offset, 4))
             offset = offset + 4
-            tree:add(f.hold_kts, tvb(offset, 4))
+            tree:add_le(f.hold_kts, tvb(offset, 4))
             offset = offset + 4
         end
         if tvb:len() - offset >= 4 + 4 + 1 + 16 + 1 + 4 + 1 + 4 then
-            tree:add(f.hold_time, tvb(offset, 4))
+            tree:add_le(f.hold_time, tvb(offset, 4))
             offset = offset + 4
-            tree:add(f.hold_rout, tvb(offset, 4))
+            tree:add_le(f.hold_rout, tvb(offset, 4))
             offset = offset + 4
             tree:add(f.alt_wp_active, tvb(offset, 1))
             offset = offset + 1
-            tree:add(f.alt_wp_lat, tvb(offset, 8))
+            tree:add_le(f.alt_wp_lat, tvb(offset, 8))
             offset = offset + 8
-            tree:add(f.alt_wp_long, tvb(offset, 8))
+            tree:add_le(f.alt_wp_long, tvb(offset, 8))
             offset = offset + 8
             tree:add(f.alt_heading_active, tvb(offset, 1))
             offset = offset + 1
-            tree:add(f.alt_heading, tvb(offset, 4))
+            tree:add_le(f.alt_heading, tvb(offset, 4))
             offset = offset + 4
             tree:add(f.alt_speed_active, tvb(offset, 1))
             offset = offset + 1
-            tree:add(f.alt_speed, tvb(offset, 4))
+            tree:add_le(f.alt_speed, tvb(offset, 4))
             offset = offset + 4
         end
     else
@@ -513,19 +513,19 @@ local function dissect_reply(tvb, tree)
     if board_desc == "AIS" and sink_desc == "AIS" then
         tree:append_text(" [" .. bs_desc .. " AIS Target Update]")
         offset = dissect_datetime(tvb, offset, tree, "Timestamp")
-        tree:add(f.latitude, tvb(offset, 8))
+        tree:add_le(f.latitude, tvb(offset, 8))
         offset = offset + 8
-        tree:add(f.longitude, tvb(offset, 8))
+        tree:add_le(f.longitude, tvb(offset, 8))
         offset = offset + 8
-        tree:add(ProtoField.uint32("seatrac.ais.mmsi", "MMSI"), tvb(offset, 4))
+        tree:add_le(ProtoField.uint32("seatrac.ais.mmsi", "MMSI"), tvb(offset, 4))
         offset = offset + 4
-        tree:add(ProtoField.uint16("seatrac.ais.speed_over_ground", "Speed over Ground", base.DEC, nil, 0, "×0.002"),
+        tree:add_le(ProtoField.uint16("seatrac.ais.speed_over_ground", "Speed over Ground", base.DEC, nil, 0, "×0.002"),
             tvb(offset, 2))
         offset = offset + 2
-        tree:add(ProtoField.uint16("seatrac.ais.course_over_ground", "Course over Ground", base.DEC, nil, 0, "×0.01"),
+        tree:add_le(ProtoField.uint16("seatrac.ais.course_over_ground", "Course over Ground", base.DEC, nil, 0, "×0.01"),
             tvb(offset, 2))
         offset = offset + 2
-        tree:add(ProtoField.uint16("seatrac.ais.heading", "Heading", base.DEC), tvb(offset, 2))
+        tree:add_le(ProtoField.uint16("seatrac.ais.heading", "Heading", base.DEC), tvb(offset, 2))
         offset = offset + 2
         tree:add(ProtoField.uint8("seatrac.ais.nav_status", "Navigation Status", base.DEC), tvb(offset, 1))
         offset = offset + 1
@@ -535,21 +535,21 @@ local function dissect_reply(tvb, tree)
         offset = offset + 1
         tree:add(f.send_stream, tvb(offset, 1), send_streams)
         offset = offset + 1
-        tree:add(f.nchunks, tvb(offset, 2))
+        tree:add_le(f.nchunks, tvb(offset, 2))
         offset = offset + 2
-        tree:add(f.chunk, tvb(offset, 2))
+        tree:add_le(f.chunk, tvb(offset, 2))
         offset = offset + 2
         if tvb:len() - offset >= 2 then
             local next_field = tvb(offset, 2):le_uint()
             if next_field > 0 and next_field < 10000 then
                 tree:append_text(" [H.264 Setup Frame]")
-                tree:add(f.setup_frame_size, tvb(offset, 2))
+                tree:add_le(f.setup_frame_size, tvb(offset, 2))
                 offset = offset + 2
                 tree:add(f.setup_frame_data, tvb(offset, next_field))
                 offset = offset + next_field
             else
                 tree:append_text(" [H.264 Image Frame]")
-                tree:add(f.image_data_size, tvb(offset, 2))
+                tree:add_le(f.image_data_size, tvb(offset, 2))
                 offset = offset + 2
                 local data_len = tvb(offset - 2, 2):le_uint()
                 tree:add(f.image_data, tvb(offset, data_len))
@@ -585,7 +585,7 @@ local function dissect_command(tvb, tree)
             offset = offset + 1
             tree:add(f.resolution, tvb(offset, 1), resolutions)
             offset = offset + 1
-            tree:add(f.period, tvb(offset, 2))
+            tree:add_le(f.period, tvb(offset, 2))
             offset = offset + 2
             tree:add(f.send_stream, tvb(offset, 1), send_streams)
             offset = offset + 1
@@ -601,36 +601,36 @@ local function dissect_command(tvb, tree)
             tree:append_text(" [" .. bs_desc .. " PTZ Command]")
             tree:add(ProtoField.uint8("seatrac.ptz.command", "PTZ Command", base.DEC, ptz_commands), tvb(offset, 1))
             offset = offset + 1
-            tree:add(ProtoField.int16("seatrac.ptz.parameter", "PTZ Parameter", base.DEC), tvb(offset, 2))
+            tree:add_le(ProtoField.int16("seatrac.ptz.parameter", "PTZ Parameter", base.DEC), tvb(offset, 2))
             offset = offset + 2
         end
     elseif board_desc == "CAN Bus" then
         if sink_desc == "Navigation" then
             if func == 5 then
                 tree:append_text(" [" .. bs_desc .. " Change State]")
-                tree:add(f.new_state, tvb(offset, 4))
+                tree:add_le(f.new_state, tvb(offset, 4))
                 offset = offset + 4
             elseif func == 7 then
                 tree:append_text(" [" .. bs_desc .. " Move to Point]")
-                tree:add(f.latitude, tvb(offset, 8))
+                tree:add_le(f.latitude, tvb(offset, 8))
                 offset = offset + 8
-                tree:add(f.longitude, tvb(offset, 8))
+                tree:add_le(f.longitude, tvb(offset, 8))
                 offset = offset + 8
-                tree:add(f.speed, tvb(offset, 4))
+                tree:add_le(f.speed, tvb(offset, 4))
                 offset = offset + 4
             end
         elseif sink_desc == "Propulsion" then
             if func == 1 then
                 tree:append_text(" [" .. bs_desc .. " Rudder Angle and RPM]")
-                tree:add(f.rudder_angle, tvb(offset, 4))
+                tree:add_le(f.rudder_angle, tvb(offset, 4))
                 offset = offset + 4
-                tree:add(f.rpm, tvb(offset, 4))
+                tree:add_le(f.rpm, tvb(offset, 4))
                 offset = offset + 4
             elseif func == 2 then
                 tree:append_text(" [" .. bs_desc .. " Heading and RPM]")
-                tree:add(f.heading, tvb(offset, 4))
+                tree:add_le(f.heading, tvb(offset, 4))
                 offset = offset + 4
-                tree:add(f.rpm, tvb(offset, 4))
+                tree:add_le(f.rpm, tvb(offset, 4))
                 offset = offset + 4
             end
         end
