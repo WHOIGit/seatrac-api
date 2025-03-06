@@ -456,6 +456,7 @@ end
 local function dissect_datetime(tvb, offset, tree, label)
     local dt_tree = tree:add_le(f.datetime, tvb(offset, 8), label or "DATETIME")
     local year = tvb(offset, 2):le_uint() + 1900
+    local item
     offset, item = tree_add(dt_tree, f.datetime_year, tvb, offset)
     item:append_text(" (" .. year .. ")")
     offset = tree_add(dt_tree, f.datetime_month, tvb, offset)
@@ -508,6 +509,7 @@ end
 local function dissect_status_pms_bms(tvb, tree, offset)
     tree:append_text(" [Power Level]")
     offset = dissect_datetime(tvb, offset, tree, "Timestamp")
+    local item
     offset, item = tree_add(tree, f.raw, tvb, offset, 18)
     item:set_text("Unknown Fields (bytes 16–33)")
     offset = tree_add(tree, f.pack_current, tvb, offset)
@@ -532,6 +534,7 @@ end
 local function dissect_status_motor_attitude(tvb, tree, offset)
     tree:append_text(" [Attitude]")
     offset = dissect_datetime(tvb, offset, tree, "Timestamp")
+    local item
     offset, item = tree_add(tree, f.heading, tvb, offset)
     item:append_text(" (×0.01)")
     offset, item = tree_add(tree, f.pitch, tvb, offset)
@@ -560,6 +563,7 @@ local function dissect_status_motor_gps(tvb, tree, offset)
     offset = tree_add(tree, f.latitude, tvb, offset)
     offset = tree_add(tree, f.longitude, tvb, offset)
     offset = tree_add(tree, f.kts, tvb, offset)
+    local item
     offset, item = tree_add(tree, f.heading, tvb, offset)
     item:append_text(" (×0.01)")
     offset = tree_add(tree, f.current_kts, tvb, offset)
@@ -573,6 +577,7 @@ end
 local function dissect_status_motor_imu(tvb, tree, offset)
     tree:append_text(" [IMU]")
     offset = dissect_datetime(tvb, offset, tree, "Timestamp")
+    local item
     offset, item = tree_add(tree, f.roll, tvb, offset)
     item:append_text(" (×0.01)")
     offset, item = tree_add(tree, f.min_roll, tvb, offset)
@@ -702,11 +707,13 @@ local function dissect_reply_pc_camera_mgr_image_data(tvb, tree, offset, func_id
         if next_field > 0 and next_field < 10000 then
             tree:append_text(" [H.264 Setup Frame]")
             offset = tree_add(tree, f.setup_frame_size, tvb, offset)
+            local item
             offset, item = tree_add(tree, f.setup_frame_data, tvb, offset, next_field)
         else
             tree:append_text(" [H.264 Image Frame]")
             offset = tree_add(tree, f.image_data_size, tvb, offset)
             local data_len = tvb(offset - 2, 2):le_uint()
+            local item
             offset, item = tree_add(tree, f.image_data, tvb, offset, data_len)
         end
     end
@@ -818,9 +825,7 @@ end
 -- Dispatch for Request (msg type 9) – for brevity we show raw payload.
 local function dissect_request(tvb, tree)
     tree:append_text(" [Request]")
-    local offset = 0
-    offset, item = tree_add(tree, f.raw, tvb, offset, tvb:len())
-    return offset
+    return tree_add(tree, f.raw, tvb, 0, tvb:len())
 end
 
 -- Dispatch for Reply (msg type 10)
@@ -931,12 +936,15 @@ function proto.dissector(tvb, pinfo, tree)
         offset = offset + dissect_command(payload_tvb, subtree)
     else
         subtree:add_expert_info(PI_UNDECODED, PI_WARN, "Unknown Message Type")
-        local _, item = tree_add(subtree, f.raw, payload_tvb, 0, payload_tvb:len())
+        offset = tree_add(subtree, f.raw, payload_tvb, 0, payload_tvb:len())
     end
 
-    -- Checksum (2 bytes as uint16)
-    offset = 6 + data_length -- Reset offset to point to the checksum bytes
-    offset = tree_add(subtree, f.checksum, tvb, offset)
+    -- Reset the offset to point to the checksum bytes
+    local checksum_offset = 6 + data_length
+    if checksum_offset ~= offset then
+        subtree:add_expert_info(PI_UNDECODED, PI_WARN, "Did not dissect entire packet")
+    end
+    tree_add(subtree, f.checksum, tvb, checksum_offset)
 end
 
 ----------------------------------------
