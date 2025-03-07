@@ -21,7 +21,9 @@ def main():
         if args.listen:
             args.port = 62001
         else:
-            args.port = 42107  # cell2 (42100) + SN8 (7)
+            # read-only 45107  # cell2 "listen" (42100) + SN8 (7)
+            # read-write 42107  # cell2 "pilot" (45100) + SN8 (7)
+            args.port = 45107
 
     if args.connect and not args.auth:
         parser.error('--auth is required with --connect')
