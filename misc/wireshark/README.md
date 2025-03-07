@@ -23,7 +23,7 @@ The Dashboard uses an TLS connection to the SeaTrac server which relays commands
 
 2. The TLS library used by the Dashboard at the time of writing does not support the `SSLKEYLOGFILE` environment variable to export the encryption secrets.
 
-First, we need Python; if your system does not have it, install with the following command, then relaunch your `cmd.exe`.
+First, we need Python; if your system does not have it, install with the following command under an administrator command prompt:
 
     winget install python3 --architecture x64 --scope machine
 
@@ -31,7 +31,7 @@ If you are on Windows for ARM, you must also delete `C:\Program Files\Python3xx\
 
     winget install Microsoft.VCRedist.2015+.x64
 
- Proceed to installing [Frida](https://frida.re):
+ Close the command prompt window and open a new one. Proceed to installing [Frida](https://frida.re):
 
     python -m ensurepip
     python -m pip install frida-tools
@@ -41,9 +41,7 @@ Open Wireshark. Under Edit → Preferences → Protocols → TLS, set the (Pre)-
 > [!TIP]
 > The `tls/example.pcap` and `tls/example-sslkeys.log` sample files can be used to test the decryption process.
 
-Start the Wireshark capture, then run Frida to start the Dashboard and start logging encryption secrets:
-
-    frida -l tls\frida-sslkeylog.js "C:\Program Files\SeaTrac\dashboard\Dashboard.exe"
+After starting a capture in Wireshark, run the `snoop.bat` script to start the Dashboard app with encryption secrets logged to `C:\dashboard\sslkeys.log`.
 
 Successful decryption is recognizable by a "Data (xx bytes)" subtree appearing in the lower left Packet Details pane of an "Application Data" packet. Decode this as a SeaTrac message by right-clicking the subtree and selecting Decode As and choosing the SeaTrac dissector.
 
