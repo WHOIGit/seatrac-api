@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
-import argparse
 import dataclasses
 import datetime
 import enum
 import math
-import socket
-import ssl
 import struct
 
-from typing import Callable, Optional, Tuple
+from typing import Optional, Tuple
 
 
 class MessageType(enum.IntEnum):
+    PING = 1  # inferred
     STATUS_REQUEST = 7
     STATUS_REPLY = 8
     REQUEST = 9
@@ -182,9 +180,6 @@ class PowerLevelMessage:
             pack_voltage, soc_percentage)
 
 
-
-
-
 @dataclasses.dataclass
 class GPSPositionMessage:
     timestamp: datetime.datetime
@@ -205,19 +200,19 @@ class SwitchSetCommand:
 
 
 # Can't monkey patch the datetime.datetime class :(
-datetime_datetime_PATTERN = '<HBBBBBB'
+datetime_PATTERN = '<HBBBBBB'
 
 def datetime_frombytes(data: bytes) -> datetime.datetime:
-    if len(data) != struct.calcsize(datetime_datetime_PATTERN):
+    if len(data) != struct.calcsize(datetime_PATTERN):
         raise ValueError('Invalid data length')
 
-    year, month, day, hour, minute, second, hundredths = struct.unpack(datetime_datetime_PATTERN, data)
+    year, month, day, hour, minute, second, hundredths = struct.unpack(datetime_PATTERN, data)
     timestamp = datetime.datetime(year + 1900, month, day, hour, minute, second,
         hundredths * 1e4)
     return timestamp
 
 def datetime___bytes__(self) -> bytes:
-    return struct.pack(datetime_datetime_PATTERN, self.year - 1900, self.month, self.day,
+    return struct.pack(datetime_PATTERN, self.year - 1900, self.month, self.day,
         self.hour, self.minute, self.second, self.microsecond // 1e4)
 
 
@@ -278,7 +273,8 @@ def parse_gps_position(data: bytes) -> Optional[GPSPositionMessage]:
         return None
 
     offset = 7
-    timestamp, offset = parse_datetime(data, offset)
+    timestamp = datetime_frombytes(data[offset:])
+    offset += struct.calcsize(datetime_PATTERN)
 
     latitude, longitude = struct.unpack_from('<dd', data, offset)
     offset += 16
@@ -299,94 +295,37 @@ def parse_gps_position(data: bytes) -> Optional[GPSPositionMessage]:
     )
 
 
+def pop_message(buffer) -> Tuple[bytearray, bytearray]:
+    # Look for the sync sequence
+    sync_offset = buffer.find(b'\x00\xff')
+    if sync_offset == -1:
+        buffer.clear()
+        return None, buffer
+    if sync_offset >= 1:
+        buffer = buffer[sync_offset:]
+
+    # Look for a complete message
+    if len(buffer) < 4:
+        return None, buffer
+    length, = struct.unpack_from('<H', buffer, 2)
+    length += 8  # include header and checksum footer
+    if len(buffer) < length:
+        return None, buffer
+    packet, buffer = buffer[:length], buffer[length:]
+
+    # Reject any packets without a valid checksum
+    if not verify_checksum(packet):
+        return None, buffer
+    return packet, buffer
+
+
 def decode_message(packet):
-    print(f'Received message: {packet.hex()}')
-
-
-def loop(sock: socket.socket|ssl.SSLContext.sslsocket_class,
-         recv: Callable[[int], bytes]) -> None:
-
-    buffer = bytearray()
-    try:
-        while True:
-            buffer.extend(recv(1024))
-
-            # Look for the sync sequence
-            sync_offset = buffer.find(b'\x00\xff')
-            if sync_offset == -1:
-                buffer.clear()
-                continue
-            if sync_offset >= 1:
-                buffer = buffer[sync_offset:]
-
-            # Look for a complete message
-            if len(buffer) < 4:
-                continue
-            length, = struct.unpack_from('<H', buffer, 2)
-            length += 8  # include header and checksum footer
-            if len(buffer) < length:
-                continue
-            packet, buffer = buffer[:length], buffer[length:]
-
-            # Reject any packets without a valid checksum
-            if not verify_checksum(packet):
-                continue
-
-            decode_message(packet)
-    except KeyboardInterrupt:
-        print("Shutting down...")
-    finally:
-        sock.close()
-
-
-def main():
-    parser = argparse.ArgumentParser(description="UDP listener or SSL client.")
-
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--listen", action="store_true")
-    group.add_argument("--connect", action="store_true")
-
-    parser.add_argument("--server", default="3.213.3.223")
-    parser.add_argument("--port", type=int)
-    parser.add_argument("--auth", nargs=2, metavar=("CERT", "KEY"))
-
-    args = parser.parse_args()
-
-    if not args.port:
-        if args.listen:
-            args.port = 62001
-        else:
-            args.port = 42107  # cell2 (42100) + SN8 (7)
-
-    if args.connect and not args.auth:
-        parser.error('--auth is required with --connect')
-
-    if args.listen:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind(('', args.port))
-        print(f'Listening on UDP port {args.port}...')
-        return loop(sock, lambda l: sock.recvfrom(l)[0])
-
-    if args.connect:
-        context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-
-        # Butcher the security settings to allow us to connect
-        ciphers = ":".join([
-            "@SECLEVEL=1",
-            "ALL",
-        ])
-        context.set_ciphers(ciphers)
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
-
-        context.load_cert_chain(certfile=args.auth[0], keyfile=args.auth[1])
-        sock = socket.create_connection((args.server, args.port))
-        sock = context.wrap_socket(sock, server_hostname=args.server)
-
-        print(f'Connected to {args.server}:{args.port} over SSL...')
-        return loop(sock, sock.recv)
-
-
-if __name__ == "__main__":
-    main()
+    msg_type = packet[5]
+    if msg_type == MessageType.PING:
+        print(f'Received ping')
+    elif msg_type == MessageType.STATUS_REPLY:
+        print(f'Received status reply: {packet.hex()}')
+    elif msg_type == MessageType.REPLY:
+        print(f'Received reply: {packet.hex()}')
+    else:
+        print(f'Received unknown message type {msg_type}: {packet.hex()}')
