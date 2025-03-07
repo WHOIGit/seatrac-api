@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
+import argparse
 import dataclasses
+import datetime
 import enum
+import math
 import socket
+import ssl
 import struct
 
-from typing import Optional
+from typing import Callable, Optional, Tuple
 
 
 class MessageType(enum.IntEnum):
@@ -123,6 +127,7 @@ class SinkID(enum.IntEnum):
 
 class COM_SWITCHES_FunctionID(enum.IntEnum):
     SET = 0
+    GET_BOARD_INFO = 1
 
 class COM_AIS_FunctionID(enum.IntEnum):
     POSITION_REPORT = 2
@@ -143,19 +148,81 @@ class PC_CAMERA_MGR_FunctionID(enum.IntEnum):
     STOP = 3
     STOP_ALL = 4
     IMAGE_DATA_START = 5
-    PTZ = 5
+    PTZ = 6
 
 
 @dataclasses.dataclass
 class PowerLevelMessage:
+    PATTERN = '<hhHH'
+
     pack_current: float
     load_current: float
     pack_voltage: float
     soc_percentage: float
 
+    @classmethod
+    def from_bytes(cls, data: bytes) -> 'PowerLevelMessage':
+        if len(data) != struct.calcsize(cls.PATTERN):
+            raise ValueError('Invalid data length')
+
+        (self.pack_current, self.load_current, self.pack_voltage,
+            self.soc_percentage) = struct.unpack(cls.PATTERN, data)
+
+        self.pack_current = self.pack_current * 0.002,
+        self.load_current = self.load_current * 0.002,
+        self.pack_voltage = self.pack_voltage * 0.001,
+        self.soc_percentage = self.soc_percentage * 0.002
+
+    def __bytes__(self) -> bytes:
+        pack_current = int(self.pack_current / 0.002)
+        load_current = int(self.load_current / 0.002)
+        pack_voltage = int(self.pack_voltage / 0.001)
+        soc_percentage = int(self.soc_percentage / 0.002)
+        return struct.pack(self.PATTERN, pack_current, load_current,
+            pack_voltage, soc_percentage)
+
+
+
+
+
+@dataclasses.dataclass
+class GPSPositionMessage:
+    timestamp: datetime.datetime
+    latitude: float
+    longitude: float
+    speed: float
+    heading: float
+    current_speed: float
+    current_heading: float
+    wind_speed: float
+    wind_heading: float
+
+
+@dataclasses.dataclass
+class SwitchSetCommand:
+    switch: int
+    state: bool
+
+
+# Can't monkey patch the datetime.datetime class :(
+datetime_datetime_PATTERN = '<HBBBBBB'
+
+def datetime_frombytes(data: bytes) -> datetime.datetime:
+    if len(data) != struct.calcsize(datetime_datetime_PATTERN):
+        raise ValueError('Invalid data length')
+
+    year, month, day, hour, minute, second, hundredths = struct.unpack(datetime_datetime_PATTERN, data)
+    timestamp = datetime.datetime(year + 1900, month, day, hour, minute, second,
+        hundredths * 1e4)
+    return timestamp
+
+def datetime___bytes__(self) -> bytes:
+    return struct.pack(datetime_datetime_PATTERN, self.year - 1900, self.month, self.day,
+        self.hour, self.minute, self.second, self.microsecond // 1e4)
+
 
 def verify_checksum(data: bytes) -> bool:
-    if len(data) < 8:
+    if len(data) < 2:
         return False
 
     sum1 = sum2 = 0
@@ -195,20 +262,131 @@ def parse_power_level(data: bytes) -> Optional[PowerLevelMessage]:
     )
 
 
-def main():
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind(('', 62001))
-    print("Listening for SeaTrac messages on port 62001...")
+def parse_gps_position(data: bytes) -> Optional[GPSPositionMessage]:
+    if len(data) < 47:
+        return None
 
+    if not verify_checksum(data):
+        return None
+
+    message_type = data[5]
+    if message_type != MessageType.STATUS_REPLY:
+        return None
+
+    sink_id = data[6]
+    if sink_id not in (SinkID.MOTOR_GPS, SinkID.MOTOR_BU_GPS):
+        return None
+
+    offset = 7
+    timestamp, offset = parse_datetime(data, offset)
+
+    latitude, longitude = struct.unpack_from('<dd', data, offset)
+    offset += 16
+
+    kts, heading, current_kts, current_heading, wind_kts, wind_heading = \
+        struct.unpack_from('<HHHHHH', data, offset)
+
+    return GPSPositionMessage(
+        timestamp=timestamp,
+        latitude=math.degrees(latitude),
+        longitude=math.degrees(longitude),
+        speed=kts * 0.002,
+        heading=heading * 0.01,
+        current_speed=current_kts * 0.002,
+        current_heading=current_heading * 0.01,
+        wind_speed=wind_kts * 0.002,
+        wind_heading=wind_heading * 0.01
+    )
+
+
+def decode_message(packet):
+    print(f'Received message: {packet.hex()}')
+
+
+def loop(sock: socket.socket|ssl.SSLContext.sslsocket_class,
+         recv: Callable[[int], bytes]) -> None:
+
+    buffer = bytearray()
     try:
         while True:
-            data, _ = sock.recvfrom(1024)
-            if power_msg := parse_power_level(data):
-                print(f"Load Current: {power_msg.load_current:.3f} A")
+            buffer.extend(recv(1024))
+
+            # Look for the sync sequence
+            sync_offset = buffer.find(b'\x00\xff')
+            if sync_offset == -1:
+                buffer.clear()
+                continue
+            if sync_offset >= 1:
+                buffer = buffer[sync_offset:]
+
+            # Look for a complete message
+            if len(buffer) < 4:
+                continue
+            length, = struct.unpack_from('<H', buffer, 2)
+            length += 8  # include header and checksum footer
+            if len(buffer) < length:
+                continue
+            packet, buffer = buffer[:length], buffer[length:]
+
+            # Reject any packets without a valid checksum
+            if not verify_checksum(packet):
+                continue
+
+            decode_message(packet)
     except KeyboardInterrupt:
         print("Shutting down...")
     finally:
         sock.close()
 
-if __name__ == '__main__':
+
+def main():
+    parser = argparse.ArgumentParser(description="UDP listener or SSL client.")
+
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--listen", action="store_true")
+    group.add_argument("--connect", action="store_true")
+
+    parser.add_argument("--server", default="3.213.3.223")
+    parser.add_argument("--port", type=int)
+    parser.add_argument("--auth", nargs=2, metavar=("CERT", "KEY"))
+
+    args = parser.parse_args()
+
+    if not args.port:
+        if args.listen:
+            args.port = 62001
+        else:
+            args.port = 42107  # cell2 (42100) + SN8 (7)
+
+    if args.connect and not args.auth:
+        parser.error('--auth is required with --connect')
+
+    if args.listen:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind(('', args.port))
+        print(f'Listening on UDP port {args.port}...')
+        return loop(sock, lambda l: sock.recvfrom(l)[0])
+
+    if args.connect:
+        context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+
+        # Butcher the security settings to allow us to connect
+        ciphers = ":".join([
+            "@SECLEVEL=1",
+            "ALL",
+        ])
+        context.set_ciphers(ciphers)
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+
+        context.load_cert_chain(certfile=args.auth[0], keyfile=args.auth[1])
+        sock = socket.create_connection((args.server, args.port))
+        sock = context.wrap_socket(sock, server_hostname=args.server)
+
+        print(f'Connected to {args.server}:{args.port} over SSL...')
+        return loop(sock, sock.recv)
+
+
+if __name__ == "__main__":
     main()
