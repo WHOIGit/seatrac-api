@@ -164,7 +164,7 @@ local PC_CAMERA_MGR_FunctionID    = {
     STOP = 3,
     STOP_ALL = 4,
     IMAGE_DATA_START = 5,
-    PTZ = 5
+    PTZ = 6
 }
 
 ----------------------------------------
