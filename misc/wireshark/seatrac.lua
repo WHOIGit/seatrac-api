@@ -280,8 +280,7 @@ end
 
 
 -- Header fields
-f.sync1                 = PF(ProtoField.uint8("seatrac.sync1", "Sync Byte 1", base.HEX))
-f.sync2                 = PF(ProtoField.uint8("seatrac.sync2", "Sync Byte 2", base.HEX))
+f.sync                  = PF(ProtoField.uint16("seatrac.sync", "Sync Bytes", base.HEX))
 f.length                = PF(ProtoField.uint16("seatrac.length", "Data Length", base.DEC))
 f.relay                 = PF(ProtoField.uint8("seatrac.relay", "Message Relay", base.DEC))
 f.msg_type              = PF(ProtoField.uint8("seatrac.msg_type", "Message Type", base.DEC,
@@ -936,8 +935,7 @@ function proto.dissector(tvb, pinfo, tree)
     local offset = 0
 
     -- Header (per the document: sync bytes, length, relay, message type)
-    offset = tree_add(subtree, f.sync1, tvb, offset)
-    offset = tree_add(subtree, f.sync2, tvb, offset)
+    offset = tree_add(subtree, f.sync, tvb, offset)
     local data_length = tvb(offset, 2):le_uint()
     offset = tree_add(subtree, f.length, tvb, offset)
     offset = tree_add(subtree, f.relay, tvb, offset)
