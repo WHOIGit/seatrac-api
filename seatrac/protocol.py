@@ -183,10 +183,11 @@ def register_message(
 class SeaTracMessage:
     HEADER_PATTERN = '<BBHBB'
     COMMAND_PATTERN = '<BBB'
+    SYNC_BYTES = (0x00, 0xFF)
 
     relay: Relay
     msg_type: MessageType
-    is_checksum_valid: bool
+    is_checksum_valid: bool = True
     board_id: Optional[BoardID] = None
     sink_id: Optional[SinkID] = None
     function_id: Optional[int] = None
@@ -202,7 +203,7 @@ class SeaTracMessage:
         sync1, sync2, length, relay, msg_type = struct.unpack_from(
             cls.HEADER_PATTERN, data
         )
-        if (sync1, sync2) != (0x00, 0xFF):
+        if (sync1, sync2) != cls.SYNC_BYTES:
             raise ValueError('Invalid sync bytes')
         if len(data) != length + header_size + 2:
             raise ValueError('Invalid data length')
@@ -225,8 +226,8 @@ class SeaTracMessage:
 
         msg_type = MessageType(msg_type)
         if msg_type in (MessageType.REQUEST,
-                     MessageType.REPLY,
-                     MessageType.COMMAND):
+                        MessageType.REPLY,
+                        MessageType.COMMAND):
             b, s, f = struct.unpack_from(cls.COMMAND_PATTERN, payload)
             board_id, sink_id, function_id = BoardID(b), SinkID(s), f
             payload = payload[struct.calcsize(cls.COMMAND_PATTERN):]
@@ -254,34 +255,36 @@ class SeaTracMessage:
         )
 
     def __bytes__(self) -> bytes:
+        # Construct appropriate header per the message type
+        msg_type_header = b''
         if self.msg_type in (MessageType.REQUEST,
                              MessageType.REPLY,
                              MessageType.COMMAND):
-            hdr = struct.pack(
+            msg_type_header = struct.pack(
                 self.COMMAND_PATTERN,
-                int(self.board_id),
-                int(self.sink_id),
-                int(self.function_id),
+                self.board_id,
+                self.sink_id,
+                self.function_id,
             )
-            body = hdr + (bytes(self.payload) if self.payload is not None else b'')
         elif self.msg_type == MessageType.STATUS_REPLY:
-            sink = struct.pack('B', int(self.sink_id))
-            ts = datetime___bytes__(self.timestamp)
-            body = sink + ts + (bytes(self.payload) if self.payload is not None else b'')
-        else:
-            body = bytes(self.payload) if self.payload is not None else b''
+            msg_type_header = bytes([
+                self.sink_id,
+                *datetime___bytes__(self.timestamp)
+            ])
+
+        body = bytes(self.payload) if self.payload is not None else b''
 
         header = struct.pack(
             self.HEADER_PATTERN,
-            0x00,
-            0xFF,
-            len(body),
-            int(self.relay),
-            int(self.msg_type),
+            0x00, 0xFF,
+            len(msg_type_header) + len(body),
+            self.relay,
+            self.msg_type,
         )
-        frame = header + body
-        frame += bytes(calculate_checksum(frame))
-        return frame
+
+        packet = header + msg_type_header + body
+        packet += bytes(calculate_checksum(packet))
+        return packet
 
 
 

@@ -1,4 +1,5 @@
 import datetime
+import struct
 import unittest
 
 from seatrac.protocol import (
@@ -16,7 +17,6 @@ from seatrac.protocol import (
     datetime_frombytes,
     verify_checksum,
 )
-
 
 
 class TestChecksum(unittest.TestCase):
@@ -44,6 +44,91 @@ class TestDatetime(unittest.TestCase):
         dt = datetime.datetime(2025, 3, 7, 21, 23, 20, 0)
         serialized = datetime___bytes__(dt)
         self.assertEqual(serialized, expected)
+
+
+class TestSeaTracMessage(unittest.TestCase):
+    def test_command_header_parsed(self):
+        original = SeaTracMessage(
+            relay=Relay(42),
+            msg_type=MessageType.COMMAND,
+            board_id=BoardID.COM,
+            sink_id=SinkID.COM_SWITCHES,
+            function_id=COM_SWITCHES_FunctionID.SET,
+            payload=SwitchSetCommand(switch=7, state=False),
+        )
+        recovered = SeaTracMessage.from_bytes(bytes(original))
+        self.assertTrue(recovered.is_checksum_valid)
+        self.assertEqual(recovered.relay, original.relay)
+        self.assertEqual(recovered.msg_type, original.msg_type)
+        self.assertEqual(recovered.board_id, original.board_id)
+        self.assertEqual(recovered.sink_id, original.sink_id)
+        self.assertEqual(recovered.function_id, original.function_id)
+
+    def test_status_reply_header_parsed(self):
+        original = SeaTracMessage(
+            relay=Relay(42),
+            msg_type=MessageType.STATUS_REPLY,
+            sink_id=SinkID.MOTOR_GPS,
+            timestamp=datetime.datetime(2025, 5, 31, 13, 12, 54, 0)
+        )
+        recovered = SeaTracMessage.from_bytes(bytes(original))
+        self.assertTrue(recovered.is_checksum_valid)
+        self.assertEqual(recovered.relay, original.relay)
+        self.assertEqual(recovered.msg_type, original.msg_type)
+        self.assertEqual(recovered.sink_id, original.sink_id)
+        self.assertEqual(recovered.timestamp, original.timestamp)
+
+    def test_too_short_raises(self):
+        # Incomplete header
+        with self.assertRaises(ValueError):
+            SeaTracMessage.from_bytes(b'\x00\xff')
+
+        # Full header, but incomplete payload
+        with self.assertRaises(ValueError):
+            SeaTracMessage.from_bytes(struct.pack(SeaTracMessage.HEADER_PATTERN,
+                0x00, 0xFF, 0x64, Relay(1), MessageType.COMMAND) + b'\x00' * 16)
+
+    def test_invalid_checksum_returns_raw_payload(self):
+        msg = SeaTracMessage(
+            relay=Relay(42),
+            msg_type=MessageType.COMMAND,
+            board_id=BoardID.PMS,
+            sink_id=SinkID.PMS_SWITCHES,
+            function_id=PMS_SWITCHES_FunctionID.SET,
+            payload=SwitchSetCommand(switch=7, state=False),
+        )
+        packet = bytes(msg)
+        packet = packet[:-1] + bytes([packet[-1] ^ 1])  # corrupt checksum
+        recovered = SeaTracMessage.from_bytes(packet)
+        self.assertFalse(recovered.is_checksum_valid)
+        self.assertIsInstance(recovered.payload, bytes)
+
+    def test_designated_parser_returns_object(self):
+        original = SeaTracMessage(
+            relay=Relay(42),
+            msg_type=MessageType.COMMAND,
+            board_id=BoardID.PMS,
+            sink_id=SinkID.PMS_SWITCHES,
+            function_id=PMS_SWITCHES_FunctionID.SET,
+            payload=SwitchSetCommand(switch=7, state=False),
+        )
+        recovered = SeaTracMessage.from_bytes(bytes(original))
+        self.assertTrue(recovered.is_checksum_valid)
+        self.assertIsInstance(recovered.payload, SwitchSetCommand)
+
+    def test_no_designated_parser_payload_bytes(self):
+        # Use a function ID for which no parser is registered
+        original = SeaTracMessage(
+            relay=Relay(42),
+            msg_type=MessageType.COMMAND,
+            board_id=BoardID.COM,
+            sink_id=SinkID.COM_SWITCHES,
+            function_id=COM_SWITCHES_FunctionID.GET_BOARD_INFO,
+            payload=b'\xAA\xBB\xCC',
+        )
+        recovered = SeaTracMessage.from_bytes(bytes(original))
+        self.assertTrue(recovered.is_checksum_valid)
+        self.assertIsInstance(recovered.payload, bytes)
 
 
 class TestPowerLevelMessage(unittest.TestCase):
