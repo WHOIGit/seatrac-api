@@ -5,7 +5,7 @@ import enum
 import math
 import struct
 
-from typing import Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, Type, Union
 
 
 class MessageType(enum.IntEnum):
@@ -15,6 +15,10 @@ class MessageType(enum.IntEnum):
     REQUEST = 9
     REPLY = 10
     COMMAND = 11
+
+class Relay(int):
+    # TODO
+    pass
 
 class BoardID(enum.IntEnum):
     COM = 1
@@ -149,9 +153,142 @@ class PC_CAMERA_MGR_FunctionID(enum.IntEnum):
     PTZ = 6
 
 
+# Use a registry mapping board, sink, function -> payload class so that the
+# SeaTracMessage deserializer can delegate to the appropriate payload class.
+FunctionID = Union[
+    COM_SWITCHES_FunctionID,
+    COM_AIS_FunctionID,
+    PMS_SWITCHES_FunctionID,
+    MOTOR_PROPULSION_FunctionID,
+    PC_CAMERA_MGR_FunctionID
+]
+MessageKey = Tuple[MessageType, Optional[BoardID], Optional[SinkID],
+    Optional[FunctionID]]
+_PAYLOAD_REGISTRY: Dict[MessageKey, Type] = {}
+
+
+def register_message(
+    msg_type: MessageType,
+    board_id: Optional[BoardID] = None,
+    sink_id: Optional[SinkID] = None,
+    function_id: Optional[FunctionID] = None,
+) -> Any:
+    def decorator(cls: Type) -> Type:
+        _PAYLOAD_REGISTRY[(msg_type, board_id, sink_id, function_id)] = cls
+        return cls
+    return decorator
+
+
+@dataclasses.dataclass
+class SeaTracMessage:
+    HEADER_PATTERN = '<BBHBB'
+    COMMAND_PATTERN = '<BBB'
+
+    relay: Relay
+    msg_type: MessageType
+    is_checksum_valid: bool
+    board_id: Optional[BoardID] = None
+    sink_id: Optional[SinkID] = None
+    function_id: Optional[int] = None
+    timestamp: Optional[datetime.datetime] = None
+    payload: Any = None
+
+    @classmethod
+    def from_bytes(cls, data: bytes) -> 'SeaTracMessage':
+        header_size = struct.calcsize(cls.HEADER_PATTERN)
+        if len(data) < header_size + 2:
+            raise ValueError('Invalid data length')
+
+        sync1, sync2, length, relay, msg_type = struct.unpack_from(
+            cls.HEADER_PATTERN, data
+        )
+        if (sync1, sync2) != (0x00, 0xFF):
+            raise ValueError('Invalid sync bytes')
+        if len(data) != length + header_size + 2:
+            raise ValueError('Invalid data length')
+
+        relay = Relay(relay)
+        msg_type = MessageType(msg_type)
+        is_checksum_valid = verify_checksum(data)
+        payload = data[header_size:-2]
+
+        if not is_checksum_valid:
+            return cls(
+                relay=relay,
+                msg_type=msg_type,
+                is_checksum_valid=False,
+                payload=payload
+            )
+
+        board_id = sink_id = function_id = None
+        timestamp = None
+
+        msg_type = MessageType(msg_type)
+        if msg_type in (MessageType.REQUEST,
+                     MessageType.REPLY,
+                     MessageType.COMMAND):
+            b, s, f = struct.unpack_from(cls.COMMAND_PATTERN, payload)
+            board_id, sink_id, function_id = BoardID(b), SinkID(s), f
+            payload = payload[struct.calcsize(cls.COMMAND_PATTERN):]
+        elif msg_type == MessageType.STATUS_REPLY:
+            sink_id = SinkID(payload[0])
+            dtsize = struct.calcsize(datetime_PATTERN)
+            timestamp = datetime_frombytes(payload[1:1+dtsize])
+            payload = payload[1+dtsize:]
+
+        # Dispatch to registered payload deserializer if available
+        key = (msg_type, board_id, sink_id, function_id)
+        payload_type = _PAYLOAD_REGISTRY.get(key)
+        if payload_type is not None:
+            payload = payload_type.from_bytes(payload)
+
+        return cls(
+            relay=relay,
+            msg_type=msg_type,
+            is_checksum_valid=is_checksum_valid,
+            board_id=board_id,
+            sink_id=sink_id,
+            function_id=function_id,
+            timestamp=timestamp,
+            payload=payload,
+        )
+
+    def __bytes__(self) -> bytes:
+        if self.msg_type in (MessageType.REQUEST,
+                             MessageType.REPLY,
+                             MessageType.COMMAND):
+            hdr = struct.pack(
+                self.COMMAND_PATTERN,
+                int(self.board_id),
+                int(self.sink_id),
+                int(self.function_id),
+            )
+            body = hdr + (bytes(self.payload) if self.payload is not None else b'')
+        elif self.msg_type == MessageType.STATUS_REPLY:
+            sink = struct.pack('B', int(self.sink_id))
+            ts = datetime___bytes__(self.timestamp)
+            body = sink + ts + (bytes(self.payload) if self.payload is not None else b'')
+        else:
+            body = bytes(self.payload) if self.payload is not None else b''
+
+        header = struct.pack(
+            self.HEADER_PATTERN,
+            0x00,
+            0xFF,
+            len(body),
+            int(self.relay),
+            int(self.msg_type),
+        )
+        frame = header + body
+        frame += bytes(calculate_checksum(frame))
+        return frame
+
+
+
+@register_message(MessageType.STATUS_REPLY, sink_id=SinkID.PMS_BMS)
 @dataclasses.dataclass
 class PowerLevelMessage:
-    PATTERN = '<hhHH'
+    PATTERN = '<18shhHH'
 
     pack_current: float
     load_current: float
@@ -160,43 +297,57 @@ class PowerLevelMessage:
 
     @classmethod
     def from_bytes(cls, data: bytes) -> 'PowerLevelMessage':
-        if len(data) != struct.calcsize(cls.PATTERN):
+        if len(data) < struct.calcsize(cls.PATTERN):
             raise ValueError('Invalid data length')
 
-        (self.pack_current, self.load_current, self.pack_voltage,
-            self.soc_percentage) = struct.unpack(cls.PATTERN, data)
+        reserved, pack_current, load_current, pack_voltage, soc_percentage = \
+            struct.unpack(cls.PATTERN, data)
 
-        self.pack_current = self.pack_current * 0.002,
-        self.load_current = self.load_current * 0.002,
-        self.pack_voltage = self.pack_voltage * 0.001,
-        self.soc_percentage = self.soc_percentage * 0.002
+        return cls(
+            pack_current=pack_current * 0.002,
+            load_current=load_current * 0.002,
+            pack_voltage=pack_voltage * 0.001,
+            soc_percentage=soc_percentage * 0.002
+        )
 
     def __bytes__(self) -> bytes:
         pack_current = int(self.pack_current / 0.002)
         load_current = int(self.load_current / 0.002)
         pack_voltage = int(self.pack_voltage / 0.001)
         soc_percentage = int(self.soc_percentage / 0.002)
-        return struct.pack(self.PATTERN, pack_current, load_current,
+        return struct.pack(self.PATTERN, b'', pack_current, load_current,
             pack_voltage, soc_percentage)
 
 
-@dataclasses.dataclass
-class GPSPositionMessage:
-    timestamp: datetime.datetime
-    latitude: float
-    longitude: float
-    speed: float
-    heading: float
-    current_speed: float
-    current_heading: float
-    wind_speed: float
-    wind_heading: float
-
-
+@register_message(
+    MessageType.COMMAND,
+    board_id=BoardID.COM,
+    sink_id=SinkID.COM_SWITCHES,
+    function_id=COM_SWITCHES_FunctionID.SET,
+)
+@register_message(
+    MessageType.COMMAND,
+    board_id=BoardID.PMS,
+    sink_id=SinkID.PMS_SWITCHES,
+    function_id=PMS_SWITCHES_FunctionID.SET,
+)
 @dataclasses.dataclass
 class SwitchSetCommand:
+    PATTERN = '<BB'
+
     switch: int
     state: bool
+
+    @classmethod
+    def from_bytes(cls, data: bytes) -> 'SwitchSetCommand':
+        if len(data) != struct.calcsize(cls.PATTERN):
+            raise ValueError('Invalid data length')
+
+        switch, state = struct.unpack(cls.PATTERN, data)
+        return cls(switch=switch, state=bool(state))
+
+    def __bytes__(self) -> bytes:
+        return struct.pack(self.PATTERN, self.switch, int(self.state))
 
 
 # Can't monkey patch the datetime.datetime class :(
@@ -206,29 +357,31 @@ def datetime_frombytes(data: bytes) -> datetime.datetime:
     if len(data) != struct.calcsize(datetime_PATTERN):
         raise ValueError('Invalid data length')
 
-    year, month, day, hour, minute, second, hundredths = struct.unpack(datetime_PATTERN, data)
-    timestamp = datetime.datetime(year + 1900, month, day, hour, minute, second,
-        hundredths * 1e4)
+    year, month, day, hour, minute, second, hundredths = \
+        struct.unpack(datetime_PATTERN, data)
+    timestamp = datetime.datetime(year, month, day, hour, minute, second,
+        hundredths * 10000)
     return timestamp
 
 def datetime___bytes__(self) -> bytes:
-    return struct.pack(datetime_PATTERN, self.year - 1900, self.month, self.day,
-        self.hour, self.minute, self.second, self.microsecond // 1e4)
+    return struct.pack(datetime_PATTERN, self.year, self.month, self.day,
+        self.hour, self.minute, self.second, self.microsecond // 10000)
 
 
-def verify_checksum(data: bytes) -> bool:
-    if len(data) < 2:
-        return False
-
+def calculate_checksum(data: bytes) -> Tuple[int, int]:
     sum1 = sum2 = 0
-    for byte in data[:-2]:
+    for byte in data:
         sum1 = (sum1 + byte) % 255
         sum2 = (sum2 + sum1) % 255
 
     check1 = (255 - (sum1 + sum2) % 255) % 255
     check2 = (255 - (sum1 + check1) % 255) % 255
+    return (check1, check2)
 
-    return (check1, check2) == (data[-2], data[-1])
+def verify_checksum(data: bytes) -> bool:
+    if len(data) < 2:
+        return False
+    return calculate_checksum(data[:-2]) == (data[-2], data[-1])
 
 
 def parse_power_level(data: bytes) -> Optional[PowerLevelMessage]:
@@ -257,45 +410,7 @@ def parse_power_level(data: bytes) -> Optional[PowerLevelMessage]:
     )
 
 
-def parse_gps_position(data: bytes) -> Optional[GPSPositionMessage]:
-    if len(data) < 47:
-        return None
-
-    if not verify_checksum(data):
-        return None
-
-    message_type = data[5]
-    if message_type != MessageType.STATUS_REPLY:
-        return None
-
-    sink_id = data[6]
-    if sink_id not in (SinkID.MOTOR_GPS, SinkID.MOTOR_BU_GPS):
-        return None
-
-    offset = 7
-    timestamp = datetime_frombytes(data[offset:])
-    offset += struct.calcsize(datetime_PATTERN)
-
-    latitude, longitude = struct.unpack_from('<dd', data, offset)
-    offset += 16
-
-    kts, heading, current_kts, current_heading, wind_kts, wind_heading = \
-        struct.unpack_from('<HHHHHH', data, offset)
-
-    return GPSPositionMessage(
-        timestamp=timestamp,
-        latitude=math.degrees(latitude),
-        longitude=math.degrees(longitude),
-        speed=kts * 0.002,
-        heading=heading * 0.01,
-        current_speed=current_kts * 0.002,
-        current_heading=current_heading * 0.01,
-        wind_speed=wind_kts * 0.002,
-        wind_heading=wind_heading * 0.01
-    )
-
-
-def pop_message(buffer) -> Tuple[bytearray, bytearray]:
+def pop_message(buffer: bytearray) -> Tuple[bytearray, bytearray]:
     # Look for the sync sequence
     sync_offset = buffer.find(b'\x00\xff')
     if sync_offset == -1:
@@ -308,7 +423,7 @@ def pop_message(buffer) -> Tuple[bytearray, bytearray]:
     if len(buffer) < 4:
         return None, buffer
     length, = struct.unpack_from('<H', buffer, 2)
-    length += 8  # include header and checksum footer
+    length += 8  # include header and checksum trailer
     if len(buffer) < length:
         return None, buffer
     packet, buffer = buffer[:length], buffer[length:]
