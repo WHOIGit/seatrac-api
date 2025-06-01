@@ -195,14 +195,39 @@ class SeaTracMessage:
     payload: Any = None
 
     @classmethod
+    def peek_length(cls, buffer: Union[bytearray, bytes]) -> Optional[int]:
+        '''
+        If a message is ready to be consumed from the buffer, return the number
+        of bytes. Otherwise, return None.
+        '''
+        sync1 = buffer[0] if len(buffer) > 0 else None
+        sync2 = buffer[1] if len(buffer) > 1 else None
+        if (sync1, sync2) == (None, None):
+            return None
+        elif (sync1, sync2) == (cls.SYNC_BYTES[0], None):
+            return None
+        elif (sync1, sync2) == cls.SYNC_BYTES:
+            pass
+        else:
+            raise ValueError('Invalid sync bytes')
+
+        header_size = struct.calcsize(cls.HEADER_PATTERN)
+        if len(buffer) < header_size + 2:
+            return None
+
+        _, _, length, _, _ = struct.unpack_from(cls.HEADER_PATTERN, buffer)
+        if len(buffer) < header_size + length + 2:
+            return None
+        return header_size + length + 2
+
+    @classmethod
     def from_bytes(cls, data: bytes) -> 'SeaTracMessage':
         header_size = struct.calcsize(cls.HEADER_PATTERN)
         if len(data) < header_size + 2:
             raise ValueError('Invalid data length')
 
         sync1, sync2, length, relay, msg_type = struct.unpack_from(
-            cls.HEADER_PATTERN, data
-        )
+            cls.HEADER_PATTERN, data)
         if (sync1, sync2) != cls.SYNC_BYTES:
             raise ValueError('Invalid sync bytes')
         if len(data) != length + header_size + 2:

@@ -130,6 +130,33 @@ class TestSeaTracMessage(unittest.TestCase):
         self.assertTrue(recovered.is_checksum_valid)
         self.assertIsInstance(recovered.payload, bytes)
 
+    def test_peek_too_short(self):
+        self.assertIsNone(SeaTracMessage.peek_length(b'\x00'))  # half sync
+        self.assertIsNone(SeaTracMessage.peek_length(b'\x00\xff'))  # full sync
+        self.assertIsNone(SeaTracMessage.peek_length(
+            struct.pack(SeaTracMessage.HEADER_PATTERN, 0x00, 0xFF, 0x64,
+                Relay(1), MessageType.COMMAND) + b'\x00' * 16))
+
+    def test_peek_invalid_sync(self):
+        with self.assertRaises(ValueError):
+            SeaTracMessage.peek_length(b'\x42')  # short, incorrect
+        with self.assertRaises(ValueError):
+            SeaTracMessage.peek_length(b'\x42\x42')  # full, incorrect
+        with self.assertRaises(ValueError):
+            SeaTracMessage.peek_length(b'\x00\x42')  # half correct
+
+    def test_peek_complete_packet(self):
+        msg = SeaTracMessage(
+            relay=Relay(42),
+            msg_type=MessageType.COMMAND,
+            board_id=BoardID.COM,
+            sink_id=SinkID.COM_SWITCHES,
+            function_id=COM_SWITCHES_FunctionID.SET,
+            payload=SwitchSetCommand(switch=2, state=True),
+        )
+        packet = bytes(msg)
+        self.assertEqual(len(packet), SeaTracMessage.peek_length(packet))
+
 
 class TestPowerLevelMessage(unittest.TestCase):
     def test_round_trip(self):
