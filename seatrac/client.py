@@ -5,7 +5,7 @@ import struct
 
 from typing import Callable
 
-from seatrac.protocol import decode_message, pop_message, verify_checksum
+from seatrac.protocol import SeaTracMessage
 
 
 def loop(sock: socket.socket|ssl.SSLContext.sslsocket_class,
@@ -15,10 +15,11 @@ def loop(sock: socket.socket|ssl.SSLContext.sslsocket_class,
     try:
         while True:
             buffer.extend(recv(1024))
-            packet, buffer = pop_message(buffer)
-            if not packet:
+            if not (ready := SeaTracMessage.peek_length(buffer)):
                 continue
-            decode_message(packet)
+            packet, buffer = buffer[:ready], buffer[ready:]
+            msg = SeaTracMessage.from_bytes(packet)
+            print(msg)
     except KeyboardInterrupt:
         print("Shutting down...")
     finally:
