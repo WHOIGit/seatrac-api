@@ -5,7 +5,7 @@ from seatrac.client import listen, connect
 
 
 def main():
-    parser = argparse.ArgumentParser(description="UDP listener or SSL client.")
+    parser = argparse.ArgumentParser()
 
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--listen", action="store_true")
