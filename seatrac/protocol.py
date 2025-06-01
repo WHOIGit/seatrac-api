@@ -156,11 +156,11 @@ class PC_CAMERA_MGR_FunctionID(enum.IntEnum):
 # Use a registry mapping board, sink, function -> payload class so that the
 # SeaTracMessage deserializer can delegate to the appropriate payload class.
 FunctionID = Union[
-    COM_SWITCHES_FunctionID,
     COM_AIS_FunctionID,
-    PMS_SWITCHES_FunctionID,
+    COM_SWITCHES_FunctionID,
     MOTOR_PROPULSION_FunctionID,
-    PC_CAMERA_MGR_FunctionID
+    PC_CAMERA_MGR_FunctionID,
+    PMS_SWITCHES_FunctionID,
 ]
 MessageKey = Tuple[MessageType, Optional[BoardID], Optional[SinkID],
     Optional[FunctionID]]
