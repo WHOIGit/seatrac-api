@@ -316,7 +316,7 @@ class SeaTracMessage:
 @register_message(MessageType.STATUS_REPLY, sink_id=SinkID.PMS_BMS)
 @dataclasses.dataclass
 class PowerLevelMessage:
-    PATTERN = '<18shhHH'
+    PATTERN = '<20shhHH4s'
 
     pack_current: float
     load_current: float
@@ -325,10 +325,10 @@ class PowerLevelMessage:
 
     @classmethod
     def from_bytes(cls, data: bytes) -> 'PowerLevelMessage':
-        if len(data) < struct.calcsize(cls.PATTERN):
+        if len(data) != struct.calcsize(cls.PATTERN):
             raise ValueError('Invalid data length')
 
-        reserved, pack_current, load_current, pack_voltage, soc_percentage = \
+        _, pack_current, load_current, pack_voltage, soc_percentage, _ = \
             struct.unpack(cls.PATTERN, data)
 
         return cls(
@@ -344,7 +344,7 @@ class PowerLevelMessage:
         pack_voltage = int(self.pack_voltage / 0.001)
         soc_percentage = int(self.soc_percentage / 0.002)
         return struct.pack(self.PATTERN, b'', pack_current, load_current,
-            pack_voltage, soc_percentage)
+            pack_voltage, soc_percentage, b'')
 
 
 @register_message(

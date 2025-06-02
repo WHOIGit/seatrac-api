@@ -175,6 +175,21 @@ class TestPowerLevelMessage(unittest.TestCase):
         assert_close(original.soc_percentage, recovered.soc_percentage)
         self.assertEqual(bytes(original), bytes(recovered))
 
+    def test_expected_encoding(self):
+        # From packet capture, but we need to erase the reserved fields
+        expected = bytearray.fromhex(
+            '010800020d0a0d070d259ca30958099b0903c80030014e02559c2ea746010000')
+        expected[0:20] = b'\x00' * 20
+        expected[-4:] = b'\x00' * 4
+
+        msg = PowerLevelMessage(
+            pack_current=0.608,
+            load_current=1.18,
+            pack_voltage=40.021,
+            soc_percentage=85.596,
+        )
+        self.assertEqual(bytes(msg), expected)
+
 
 class TestSwitchSetCommand(unittest.TestCase):
     def test_round_trip_com(self):
