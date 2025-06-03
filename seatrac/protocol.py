@@ -381,9 +381,12 @@ class SwitchSetCommand:
 # Can't monkey patch the datetime.datetime class :(
 datetime_PATTERN = '<HBBBBBB'
 
-def datetime_frombytes(data: bytes) -> datetime.datetime:
+def datetime_frombytes(data: bytes) -> Optional[datetime.datetime]:
     if len(data) != struct.calcsize(datetime_PATTERN):
         raise ValueError('Invalid data length')
+
+    if not any(data):
+        return None
 
     year, month, day, hour, minute, second, hundredths = \
         struct.unpack(datetime_PATTERN, data)
@@ -391,7 +394,9 @@ def datetime_frombytes(data: bytes) -> datetime.datetime:
         hundredths * 10000)
     return timestamp
 
-def datetime___bytes__(self) -> bytes:
+def datetime___bytes__(self: Optional[datetime.datetime]) -> bytes:
+    if self is None:
+        return b'\x00' * struct.calcsize(datetime_PATTERN)
     return struct.pack(datetime_PATTERN, self.year, self.month, self.day,
         self.hour, self.minute, self.second, self.microsecond // 10000)
 

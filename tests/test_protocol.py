@@ -45,6 +45,11 @@ class TestDatetime(unittest.TestCase):
         serialized = datetime___bytes__(dt)
         self.assertEqual(serialized, expected)
 
+    def test_null(self):
+        serialized = datetime___bytes__(None)
+        self.assertTrue(not any(serialized))  # all zero
+        self.assertIsNone(datetime_frombytes(serialized))
+
 
 class TestSeaTracMessage(unittest.TestCase):
     def test_command_header_parsed(self):
