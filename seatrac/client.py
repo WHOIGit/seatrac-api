@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import socket
 import ssl
-import struct
+import traceback
 
 from typing import Callable
 
@@ -18,8 +18,12 @@ def loop(sock: socket.socket|ssl.SSLContext.sslsocket_class,
             if not (ready := SeaTracMessage.peek_length(buffer)):
                 continue
             packet, buffer = buffer[:ready], buffer[ready:]
-            msg = SeaTracMessage.from_bytes(packet)
-            print(msg)
+            try:
+                msg = SeaTracMessage.from_bytes(packet)
+                print(msg)
+            except:
+                print(f'Exception while handling packet {packet.hex()}:')
+                traceback.print_exc()
     except KeyboardInterrupt:
         print("Shutting down...")
     finally:
