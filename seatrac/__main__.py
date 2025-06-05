@@ -41,7 +41,7 @@ def main():
 
     for msg in loop(sock, recv):
         print(msg)
-        if args.relay:
+        if args.relay and msg.is_checksum_valid:
             relay.sendto(bytes(msg), (args.relay[0], int(args.relay[1])))
 
 
