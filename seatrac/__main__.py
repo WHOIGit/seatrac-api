@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import socket
 
 from seatrac.client import connect, listen, loop
 
@@ -14,6 +15,7 @@ def main():
     parser.add_argument("--server", default="3.213.3.223")
     parser.add_argument("--port", type=int)
     parser.add_argument("--auth", nargs=2, metavar=("CERT", "KEY"))
+    parser.add_argument("--relay", nargs=2, metavar=("DEST", "PORT"))
 
     args = parser.parse_args()
 
@@ -35,8 +37,12 @@ def main():
         sock, recv = connect(args.server, args.port, *args.auth)
         print(f'Connected to {args.server}:{args.port} over SSL...')
 
+    relay = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
     for msg in loop(sock, recv):
         print(msg)
+        if args.relay:
+            relay.sendto(bytes(msg), (args.relay[0], int(args.relay[1])))
 
 
 if __name__ == "__main__":
