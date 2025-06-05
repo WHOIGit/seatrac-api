@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import rospy
 
+from typing import Callable
+
 import seatrac.protocol as proto
 
 from ds_core_msgs.msg import RawData
