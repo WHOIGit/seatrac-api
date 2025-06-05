@@ -406,8 +406,8 @@ def calculate_checksum(data: bytes) -> Tuple[int, int]:
         sum1 = (sum1 + byte) % 255
         sum2 = (sum2 + sum1) % 255
 
-    check1 = (255 - (sum1 + sum2) % 255) % 255
-    check2 = (255 - (sum1 + check1) % 255) % 255
+    check1 = 255 - ((sum1 + sum2) % 255)
+    check2 = 255 - ((sum1 + check1) % 255)
     return (check1, check2)
 
 def verify_checksum(data: bytes) -> bool:

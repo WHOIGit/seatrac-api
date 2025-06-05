@@ -20,11 +20,19 @@ from seatrac.protocol import (
 
 
 class TestChecksum(unittest.TestCase):
-    def test_verify_checksum(self):
+    def test_round_trip(self):
         body = b'\42' * 8
         c1, c2 = calculate_checksum(body)
         self.assertTrue(verify_checksum(body + bytes([c1, c2])))
         self.assertFalse(verify_checksum(body + bytes([c1 ^ 1, c2])))
+
+    def test_checksum_0xFF_digit(self):
+        # Regression test for a bug where check digits of 0xFF were not handled
+        # correctly due to an extraneous % 255 in the checksum calculation.
+        self.assertTrue(verify_checksum(bytes.fromhex(
+            '00ff1500ff0815e9070605101d210000c079c40000c079c4000500ff80'
+        )))
+
 
 
 class TestDatetime(unittest.TestCase):
