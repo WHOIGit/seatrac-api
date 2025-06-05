@@ -2,7 +2,6 @@
 import dataclasses
 import datetime
 import enum
-import math
 import struct
 
 from typing import Any, Dict, Optional, Tuple, Type, Union
