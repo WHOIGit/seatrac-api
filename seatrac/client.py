@@ -3,14 +3,17 @@ import socket
 import ssl
 import traceback
 
-from typing import Callable
+from typing import Callable, Generator, Tuple, Union
 
 from seatrac.protocol import SeaTracMessage
 
 
-def loop(sock: socket.socket|ssl.SSLContext.sslsocket_class,
-         recv: Callable[[int], bytes]) -> None:
+Socket = Union[socket.socket, ssl.SSLContext.sslsocket_class]
+RecvCallable = Callable[[int], bytes]
 
+
+def loop(sock: Socket, recv: RecvCallable) \
+-> Generator[SeaTracMessage, None, None]:
     buffer = bytearray()
     try:
         while True:
@@ -19,8 +22,7 @@ def loop(sock: socket.socket|ssl.SSLContext.sslsocket_class,
                 continue
             packet, buffer = buffer[:ready], buffer[ready:]
             try:
-                msg = SeaTracMessage.from_bytes(packet)
-                print(msg)
+                yield SeaTracMessage.from_bytes(packet)
             except:
                 print(f'Exception while handling packet {packet.hex()}:')
                 traceback.print_exc()
@@ -30,16 +32,15 @@ def loop(sock: socket.socket|ssl.SSLContext.sslsocket_class,
         sock.close()
 
 
-def listen(port=62001) -> None:
+def listen(port=62001) -> Tuple[Socket, RecvCallable]:
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.bind(('', port))
-
-    print(f'Listening on UDP port {port}...')
-    loop(sock, lambda l: sock.recvfrom(l)[0])
+    return (sock, lambda l: sock.recvfrom(l)[0])
 
 
-def connect(server: str, port: int, certfile: str, keyfile: str) -> None:
+def connect(server: str, port: int, certfile: str, keyfile: str) \
+-> Tuple[Socket, RecvCallable]:
     context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
 
     # Butcher the security settings to allow us to connect
@@ -56,6 +57,4 @@ def connect(server: str, port: int, certfile: str, keyfile: str) -> None:
 
     sock = socket.create_connection((server, port))
     sock = context.wrap_socket(sock, server_hostname=server)
-
-    print(f'Connected to {server}:{port} over SSL...')
-    return loop(sock, sock.recv)
+    return (sock, sock.recv)

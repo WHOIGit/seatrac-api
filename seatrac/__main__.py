@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 
-from seatrac.client import listen, connect
+from seatrac.client import connect, listen, loop
 
 
 def main():
@@ -29,10 +29,14 @@ def main():
         parser.error('--auth is required with --connect')
 
     if args.listen:
-        return listen(args.port)
+        sock, recv = listen(args.port)
+        print(f'Listening on UDP port {args.port}...')
+    elif args.connect:
+        sock, recv = connect(args.server, args.port, *args.auth)
+        print(f'Connected to {args.server}:{args.port} over SSL...')
 
-    if args.connect:
-        return connect(args.server, args.port, *args.auth)
+    for msg in loop(sock, recv):
+        print(msg)
 
 
 if __name__ == "__main__":
