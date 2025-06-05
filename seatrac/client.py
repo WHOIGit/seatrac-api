@@ -18,14 +18,13 @@ def loop(sock: Socket, recv: RecvCallable) \
     try:
         while True:
             buffer.extend(recv(1024))
-            if not (ready := SeaTracMessage.peek_length(buffer)):
-                continue
-            packet, buffer = buffer[:ready], buffer[ready:]
-            try:
-                yield SeaTracMessage.from_bytes(packet)
-            except:
-                print(f'Exception while handling packet {packet.hex()}:')
-                traceback.print_exc()
+            while ready := SeaTracMessage.peek_length(buffer):
+                packet, buffer = buffer[:ready], buffer[ready:]
+                try:
+                    yield SeaTracMessage.from_bytes(packet)
+                except:
+                    print(f'Exception while handling packet {packet.hex()}:')
+                    traceback.print_exc()
     except KeyboardInterrupt:
         print("Shutting down...")
     finally:
