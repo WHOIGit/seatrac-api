@@ -204,8 +204,8 @@ class TestSwitchSetCommand(unittest.TestCase):
         self.assertTrue(recovered.state, original.state)
 
     def test_expected_encoding(self):
-        expected = bytes.fromhex('0501')  # TODO: use packet capture
-        cmd = SwitchSetCommand(switch=5, state=True)
+        expected = bytes.fromhex('0f01')  # from packet capture
+        cmd = SwitchSetCommand(switch=15, state=True)
         self.assertEqual(bytes(cmd), expected)
 
 
