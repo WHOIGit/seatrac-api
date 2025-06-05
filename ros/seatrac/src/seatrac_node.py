@@ -25,10 +25,11 @@ def main() -> None:
 
     def handle_power_level(msg: proto.PowerLevelMessage) -> None:
         ros_msg = PowerLevel()
-        ros_msg.pack_current = msg.payload.pack_current
-        ros_msg.load_current = msg.payload.load_current
-        ros_msg.pack_voltage = msg.payload.pack_voltage
-        ros_msg.soc_percentage = msg.payload.soc_percentage
+        ros_msg.header.stamp = ros_msg.ds_header.io_time = rospy.Time.now()
+        ros_msg.pack_current = msg.pack_current
+        ros_msg.load_current = msg.load_current
+        ros_msg.pack_voltage = msg.pack_voltage
+        ros_msg.soc_percentage = msg.soc_percentage
         power_pub.publish(ros_msg)
 
     def handle_seatrac_message(msg: proto.SeaTracMessage) -> None:
@@ -66,15 +67,18 @@ def main() -> None:
                 rospy.logwarn(f'Unknown outlet {msg.name}')
                 return
 
-            out_pub.publish(RawData(
-                data=bytes(proto.SeaTracMessage(
-                    relay=0,  # FIXME?
-                    msg_type=proto.MessageType.COMMAND,
-                    board_id=board_id,
-                    sink_id=sink_id,
-                    function_id=function_id,
-                    payload=proto.SwitchSetCommand(outlet, msg.is_active),
-            ))))
+            out = RawData()
+            out.data_direction = RawData.DATA_OUT
+            out.data = bytes(proto.SeaTracMessage(
+                relay=0,  # FIXME? Should we use a specific relay?
+                msg_type=proto.MessageType.COMMAND,
+                board_id=board_id,
+                sink_id=sink_id,
+                function_id=function_id,
+                payload=proto.SwitchSetCommand(outlet, msg.is_active),
+            ))
+            out.header.stamp = out.ds_header.io_time = rospy.Time.now()
+            out_pub.publish(out)
         return cb
 
     rospy.Subscriber('~in', RawData, handle_raw_packet)
