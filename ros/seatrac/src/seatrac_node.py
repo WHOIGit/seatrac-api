@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 import datetime
+import functools
 
 import rospy
 
-from typing import Callable, Optional
+from typing import Optional
 
 import seatrac.protocol as proto
 
 from ds_core_msgs.msg import RawData
+from std_msgs.msg import Bool
 from seatrac.msg import PowerLevel, OutletStatus
 
 
@@ -29,8 +31,23 @@ def main() -> None:
         if 'name' in o and 'outlet' in o
     }
 
+    # Sanity check the outlet numbers
+    for name, number in outlets.items():
+        if not 1 <= number <= proto.PMSSwitchStatusMessage.NUM_SWITCHES:
+            rospy.logerr(f'Outlet {name} has out of range number {number}')
+            exit(1)
+
+    if len(outlets) != len(set(outlets.values())):
+        rospy.logerr('Duplicate outlet numbers found in configuration')
+        exit(1)
+
     power_pub = rospy.Publisher('~power', PowerLevel, queue_size=10)
     out_pub = rospy.Publisher('~out', RawData, queue_size=10)
+    status_pubs = {
+        name: rospy.Publisher(f'~outlet/{name}/status', OutletStatus,
+                              queue_size=10)
+        for name in outlets
+    }
 
     buffer = bytearray()
 
@@ -44,9 +61,19 @@ def main() -> None:
         ros_msg.soc_percentage = msg.soc_percentage
         power_pub.publish(ros_msg)
 
+    def handle_switch_status(msg: proto.PMSSwitchStatusMessage,
+                             timestamp: Optional[datetime.datetime]) -> None:
+        for name, number in outlets.items():
+            ros_msg = OutletStatus()
+            populate_timestamps(ros_msg, timestamp)
+            ros_msg.is_active = msg.states[number - 1]
+            status_pubs[name].publish(ros_msg)
+
     def handle_seatrac_message(msg: proto.SeaTracMessage) -> None:
         if isinstance(msg.payload, proto.PowerLevelMessage):
             handle_power_level(msg.payload, msg.timestamp)
+        elif isinstance(msg.payload, proto.PMSSwitchStatusMessage):
+            handle_switch_status(msg.payload, msg.timestamp)
 
     def handle_raw_packet(in_msg: RawData) -> None:
         buffer.extend(in_msg.data)
@@ -68,48 +95,27 @@ def main() -> None:
 
             handle_seatrac_message(parsed)
 
-    def make_switch_control_callback(
-        board_id: proto.BoardID,
-        sink_id: proto.SinkID,
-        function_id: proto.FunctionID
-    ) -> Callable[[OutletStatus], None]:
-        def cb(msg: OutletStatus) -> None:
-            outlet = outlets.get(msg.name)
-            if outlet is None:
-                rospy.logwarn(f'Unknown outlet {msg.name}')
-                return
-
-            out = RawData()
-            out.data_direction = RawData.DATA_OUT
-            out.data = bytes(proto.SeaTracMessage(
-                relay=0,  # FIXME? Should we use a specific relay?
-                msg_type=proto.MessageType.COMMAND,
-                board_id=board_id,
-                sink_id=sink_id,
-                function_id=function_id,
-                payload=proto.SwitchSetCommand(outlet, msg.is_active),
-            ))
-            out.header.stamp = out.ds_header.io_time = rospy.Time.now()
-            out_pub.publish(out)
-        return cb
-
     rospy.Subscriber('~in', RawData, handle_raw_packet)
-    rospy.Subscriber(
-        '~com_switches/control', OutletStatus,
-        make_switch_control_callback(
-            proto.BoardID.COM,
-            proto.SinkID.COM_SWITCHES,
-            proto.PMS_SWITCHES_FunctionID.SET
-        )
-    )
-    rospy.Subscriber(
-        '~pms_switches/control', OutletStatus,
-        make_switch_control_callback(
-            proto.BoardID.PMS,
-            proto.SinkID.PMS_SWITCHES,
-            proto.PMS_SWITCHES_FunctionID.SET
-        )
-    )
+
+
+    def handle_outlet_control(outlet: int, msg: Bool) -> None:
+        out = RawData()
+        out.data_direction = RawData.DATA_OUT
+        out.data = bytes(proto.SeaTracMessage(
+            relay=0,  # FIXME? Should we use a specific relay?
+            msg_type=proto.MessageType.COMMAND,
+            board_id=proto.BoardID.PMS,
+            sink_id=proto.SinkID.PMS_SWITCHES,
+            function_id=proto.PMS_SWITCHES_FunctionID.SET,
+            payload=proto.SwitchSetCommand(outlet, msg.data),
+        ))
+        out.header.stamp = out.ds_header.io_time = rospy.Time.now()
+        out_pub.publish(out)
+
+    for name, number in outlets.items():
+        rospy.Subscriber(f'~outlet/{name}/control', Bool,
+                         functools.partial(handle_outlet_control, number))
+
 
     rospy.spin()
 
