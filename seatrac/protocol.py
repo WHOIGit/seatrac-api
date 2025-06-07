@@ -4,7 +4,7 @@ import datetime
 import enum
 import struct
 
-from typing import Any, Dict, Optional, Tuple, Type, Union
+from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 
 class MessageType(enum.IntEnum):
@@ -388,7 +388,7 @@ class PMSSwitchStatusMessage:
     #   [ 24V Bus, 24V #1, 24V #2, 24V #3, VBat #1, VBat #2, VBat #3, 24V #4 ]
     #   [ Anchor Light, VBat #4, ... reserved ... ]
 
-    states: list[bool] = dataclasses.field(
+    states: List[bool] = dataclasses.field(
         # Sneakily add a parameter n with default value NUM_SWITCHES to capture
         # its value at class definition time.
         default_factory=lambda n=NUM_SWITCHES: [False] * n
