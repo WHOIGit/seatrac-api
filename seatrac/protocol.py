@@ -427,7 +427,7 @@ def datetime_frombytes(data: bytes) -> Optional[datetime.datetime]:
     year, month, day, hour, minute, second, hundredths = \
         struct.unpack(datetime_PATTERN, data)
     timestamp = datetime.datetime(year, month, day, hour, minute, second,
-        hundredths * 10000)
+        hundredths * 10000, tzinfo=datetime.timezone.utc)
     return timestamp
 
 def datetime___bytes__(self: Optional[datetime.datetime]) -> bytes:

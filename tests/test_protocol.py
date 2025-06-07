@@ -39,9 +39,12 @@ class TestChecksum(unittest.TestCase):
 class TestDatetime(unittest.TestCase):
     def test_round_trip(self):
         samples = [
-            datetime.datetime(1970, 1, 1, 0, 0, 0, 0),
-            datetime.datetime(2022, 12, 31, 23, 59, 59, 120000),
-            datetime.datetime(2025, 3, 7, 15, 17, 14, 250000),
+            datetime.datetime(1970, 1, 1, 0, 0, 0, 0,
+                              tzinfo=datetime.timezone.utc),
+            datetime.datetime(2022, 12, 31, 23, 59, 59, 120000,
+                              tzinfo=datetime.timezone.utc),
+            datetime.datetime(2025, 3, 7, 15, 17, 14, 250000,
+                              tzinfo=datetime.timezone.utc),
         ]
         for dt in samples:
             serialized = datetime___bytes__(dt)
@@ -50,7 +53,8 @@ class TestDatetime(unittest.TestCase):
 
     def test_expected_encoding(self):
         expected = bytes.fromhex('e907030715171400')  # captured in packet trace
-        dt = datetime.datetime(2025, 3, 7, 21, 23, 20, 0)
+        dt = datetime.datetime(2025, 3, 7, 21, 23, 20, 0,
+                               tzinfo=datetime.timezone.utc)
         serialized = datetime___bytes__(dt)
         self.assertEqual(serialized, expected)
 
@@ -83,7 +87,8 @@ class TestSeaTracMessage(unittest.TestCase):
             relay=Relay(42),
             msg_type=MessageType.STATUS_REPLY,
             sink_id=SinkID.MOTOR_GPS,
-            timestamp=datetime.datetime(2025, 5, 31, 13, 12, 54, 0)
+            timestamp=datetime.datetime(2025, 5, 31, 13, 12, 54, 0,
+                                        tzinfo=datetime.timezone.utc),
         )
         recovered = SeaTracMessage.from_bytes(bytes(original))
         self.assertTrue(recovered.is_checksum_valid)
