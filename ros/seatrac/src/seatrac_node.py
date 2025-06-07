@@ -26,7 +26,7 @@ def main() -> None:
     outlets = {
         o['name']: o['outlet']
         for o in rospy.get_param('~outlets', [])
-        if hasattr(o, 'name') and hasattr(o, 'outlet')
+        if 'name' in o and 'outlet' in o
     }
 
     power_pub = rospy.Publisher('~power', PowerLevel, queue_size=10)
