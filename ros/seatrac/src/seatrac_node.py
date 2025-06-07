@@ -1,12 +1,23 @@
 #!/usr/bin/env python3
+import datetime
+
 import rospy
 
-from typing import Callable
+from typing import Callable, Optional
 
 import seatrac.protocol as proto
 
 from ds_core_msgs.msg import RawData
 from seatrac.msg import PowerLevel, OutletStatus
+
+
+def populate_timestamps(msg, timestamp: Optional[datetime.datetime]) -> None:
+    # See HEADERS.md in ds_core_msgs for details on the timestamps.
+    #     header.stamp: timestamp reported by the boat
+    #     ds_header.io_time: timestamp when we received it
+    msg.header.stamp = msg.ds_header.io_time = rospy.Time.now()
+    if timestamp is not None:
+        msg.header.stamp = rospy.Time.from_sec(timestamp.timestamp())
 
 
 def main() -> None:
@@ -23,9 +34,10 @@ def main() -> None:
 
     buffer = bytearray()
 
-    def handle_power_level(msg: proto.PowerLevelMessage) -> None:
+    def handle_power_level(msg: proto.PowerLevelMessage,
+                           timestamp: Optional[datetime.datetime]) -> None:
         ros_msg = PowerLevel()
-        ros_msg.header.stamp = ros_msg.ds_header.io_time = rospy.Time.now()
+        populate_timestamps(ros_msg, timestamp)
         ros_msg.pack_current = msg.pack_current
         ros_msg.load_current = msg.load_current
         ros_msg.pack_voltage = msg.pack_voltage
@@ -34,7 +46,7 @@ def main() -> None:
 
     def handle_seatrac_message(msg: proto.SeaTracMessage) -> None:
         if isinstance(msg.payload, proto.PowerLevelMessage):
-            handle_power_level(msg.payload)
+            handle_power_level(msg.payload, msg.timestamp)
 
     def handle_raw_packet(in_msg: RawData) -> None:
         buffer.extend(in_msg.data)
