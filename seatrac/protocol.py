@@ -389,7 +389,10 @@ class PMSSwitchStatusMessage:
     #   [ Anchor Light, VBat #4, ... reserved ... ]
 
     states: list[bool] = dataclasses.field(
-        default_factory=lambda: [False] * NUM_SWITCHES)
+        # Sneakily add a parameter n with default value NUM_SWITCHES to capture
+        # its value at class definition time.
+        default_factory=lambda n=NUM_SWITCHES: [False] * n
+    )
 
     @classmethod
     def from_bytes(cls, data: bytes) -> 'PMSSwitchStatusMessage':

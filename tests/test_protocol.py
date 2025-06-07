@@ -219,6 +219,10 @@ class TestSwitchSetCommand(unittest.TestCase):
 
 
 class TestPMSSwitchStatusMessage(unittest.TestCase):
+    def test_initialization(self):
+        msg = PMSSwitchStatusMessage()
+        self.assertEqual(len(msg.states), PMSSwitchStatusMessage.NUM_SWITCHES)
+
     def test_round_trip_all_states(self):
         nswitches = PMSSwitchStatusMessage.NUM_SWITCHES
         for i in range(1 << nswitches):
