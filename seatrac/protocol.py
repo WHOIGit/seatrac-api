@@ -377,6 +377,40 @@ class SwitchSetCommand:
         return struct.pack(self.PATTERN, self.switch, int(self.state))
 
 
+@register_message(MessageType.STATUS_REPLY, sink_id=SinkID.PMS_SWITCHES)
+@dataclasses.dataclass
+class PMSSwitchStatusMessage:
+    PATTERN = '<18sBBB'
+    NUM_SWITCHES = 18
+
+    # Encoding of the switch states, least-significant bit first:
+    #   [ Nav Light, COM, Motor, CAN, 12V Bus, 12V #1, 12V #2, 12V #3 ]
+    #   [ 24V Bus, 24V #1, 24V #2, 24V #3, VBat #1, VBat #2, VBat #3, 24V #4 ]
+    #   [ Anchor Light, VBat #4, ... reserved ... ]
+
+    states: list[bool] = dataclasses.field(
+        default_factory=lambda: [False] * NUM_SWITCHES)
+
+    @classmethod
+    def from_bytes(cls, data: bytes) -> 'PMSSwitchStatusMessage':
+        if len(data) != struct.calcsize(cls.PATTERN):
+            raise ValueError('Invalid data length')
+
+        _, a, b, c = struct.unpack(cls.PATTERN, data)
+        packed = int.from_bytes([a, b, c], 'little')
+        states = [bool((packed >> i) & 1) for i in range(cls.NUM_SWITCHES)]
+        return cls(states=states)
+
+    def __bytes__(self) -> bytes:
+        if len(self.states) != self.NUM_SWITCHES:
+            raise ValueError(f'Expected {self.NUM_SWITCHES} states')
+
+        # Pack the states into a little-endian integer
+        packed = sum(int(b) << i for i, b in enumerate(self.states))
+        n = (self.NUM_SWITCHES + 7) // 8  # number of bytes needed
+        return struct.pack(self.PATTERN, b'', *packed.to_bytes(n, 'little'))
+
+
 # Can't monkey patch the datetime.datetime class :(
 datetime_PATTERN = '<HBBBBBB'
 

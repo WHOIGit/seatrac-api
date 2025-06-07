@@ -7,6 +7,7 @@ from seatrac.protocol import (
     COM_SWITCHES_FunctionID,
     MessageType,
     PMS_SWITCHES_FunctionID,
+    PMSSwitchStatusMessage,
     PowerLevelMessage,
     Relay,
     SeaTracMessage,
@@ -215,6 +216,42 @@ class TestSwitchSetCommand(unittest.TestCase):
         expected = bytes.fromhex('0f01')  # from packet capture
         cmd = SwitchSetCommand(switch=15, state=True)
         self.assertEqual(bytes(cmd), expected)
+
+
+class TestPMSSwitchStatusMessage(unittest.TestCase):
+    def test_round_trip_all_states(self):
+        nswitches = PMSSwitchStatusMessage.NUM_SWITCHES
+        for i in range(1 << nswitches):
+            original = PMSSwitchStatusMessage(
+                states=[bool((i >> j) & 1) for j in range(nswitches)]
+            )
+            recovered = PMSSwitchStatusMessage.from_bytes(bytes(original))
+            self.assertEqual(original.states, recovered.states)
+
+    def test_invalid_states_length(self):
+        nswitches = PMSSwitchStatusMessage.NUM_SWITCHES
+        with self.assertRaises(ValueError):
+            bytes(PMSSwitchStatusMessage(states=[False] * (nswitches - 1)))
+        with self.assertRaises(ValueError):
+            bytes(PMSSwitchStatusMessage(states=[False] * (nswitches + 1)))
+
+    def test_expected_encoding(self):
+        # From packet capture, but we need to erase the reserved fields
+        expected = bytearray.fromhex(
+            '1208824b3c9b62046a04260900002609fc0c0e6700')
+        expected[0:18] = b'\x00' * 18  # reserved fields
+
+        msg = PMSSwitchStatusMessage(states=[
+            # Nav light off; COM, MOTOR, CAN on; 12V bus, 12V #1-#3 off
+            False, True, True, True, False, False, False, False,
+            # 24V bus, #1 (Router), #2 (Cameras) on; 24V #3 (Certus) off;
+            # VBat #1 (Orange PC) off; VBat #2 (IFCB), VBat #3 (Starlink) on;
+            # 24V #4 off
+            True, True, True, False, False, True, True, False,
+            # Anchor light, VBat #4 off
+            False, False,
+        ])
+        self.assertEqual(bytes(msg), expected)
 
 
 if __name__ == '__main__':
