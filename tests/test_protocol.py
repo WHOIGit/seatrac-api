@@ -150,7 +150,8 @@ class TestSeaTracMessage(unittest.TestCase):
         self.assertIsInstance(recovered.payload, bytes)
 
     def test_unknown_msg_type(self):
-        unknown_msg_type = next(x for x in range(256) if x not in MessageType)
+        msg_types = [ m.value for m in MessageType ]  # for Python < 3.12
+        unknown_msg_type = next(x for x in range(256) if x not in msg_types)
         original = SeaTracMessage(
             relay=Relay(42),
             msg_type=unknown_msg_type,

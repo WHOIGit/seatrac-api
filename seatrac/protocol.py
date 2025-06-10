@@ -233,10 +233,13 @@ class SeaTracMessage:
             raise ValueError('Invalid data length')
 
         relay = Relay(relay)
-        msg_type = (MessageType(msg_type) if msg_type in MessageType
-                    else msg_type)
         is_checksum_valid = verify_checksum(data)
         payload = data[header_size:-2]
+
+        try:
+            msg_type = MessageType(msg_type)
+        except ValueError:
+            pass  # fallback to using the raw integer value
 
         if not is_checksum_valid:
             return cls(
