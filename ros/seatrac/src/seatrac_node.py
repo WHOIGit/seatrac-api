@@ -102,7 +102,7 @@ def main() -> None:
         out = RawData()
         out.data_direction = RawData.DATA_OUT
         out.data = bytes(proto.SeaTracMessage(
-            relay=0,  # FIXME? Should we use a specific relay?
+            relay=8,  # internal CAN bus; FIXME: Needs to an enum constant
             msg_type=proto.MessageType.COMMAND,
             board_id=proto.BoardID.PMS,
             sink_id=proto.SinkID.PMS_SWITCHES,
