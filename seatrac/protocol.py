@@ -185,7 +185,7 @@ class SeaTracMessage:
     SYNC_BYTES = (0x00, 0xFF)
 
     relay: Relay
-    msg_type: MessageType
+    msg_type: Union[MessageType, int]
     is_checksum_valid: bool = True
     board_id: Optional[BoardID] = None
     sink_id: Optional[SinkID] = None
@@ -233,7 +233,8 @@ class SeaTracMessage:
             raise ValueError('Invalid data length')
 
         relay = Relay(relay)
-        msg_type = MessageType(msg_type)
+        msg_type = (MessageType(msg_type) if msg_type in MessageType
+                    else msg_type)
         is_checksum_valid = verify_checksum(data)
         payload = data[header_size:-2]
 
@@ -248,7 +249,6 @@ class SeaTracMessage:
         board_id = sink_id = function_id = None
         timestamp = None
 
-        msg_type = MessageType(msg_type)
         if msg_type in (MessageType.REQUEST,
                         MessageType.REPLY,
                         MessageType.COMMAND):

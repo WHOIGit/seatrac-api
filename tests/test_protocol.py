@@ -149,6 +149,19 @@ class TestSeaTracMessage(unittest.TestCase):
         self.assertTrue(recovered.is_checksum_valid)
         self.assertIsInstance(recovered.payload, bytes)
 
+    def test_unknown_msg_type(self):
+        unknown_msg_type = next(x for x in range(256) if x not in MessageType)
+        original = SeaTracMessage(
+            relay=Relay(42),
+            msg_type=unknown_msg_type,
+            payload=b'',
+        )
+        recovered = SeaTracMessage.from_bytes(bytes(original))
+
+        self.assertTrue(recovered.is_checksum_valid)
+        self.assertIsInstance(recovered.msg_type, int)
+        self.assertEqual(recovered.msg_type, unknown_msg_type)
+
     def test_peek_too_short(self):
         self.assertIsNone(SeaTracMessage.peek_length(b'\x00'))  # half sync
         self.assertIsNone(SeaTracMessage.peek_length(b'\x00\xff'))  # full sync
