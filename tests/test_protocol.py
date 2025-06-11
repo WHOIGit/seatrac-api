@@ -67,7 +67,8 @@ class TestDatetime(unittest.TestCase):
 class TestSeaTracMessage(unittest.TestCase):
     def test_command_header_parsed(self):
         original = SeaTracMessage(
-            relay=Relay(42),
+            outbound_relay=Relay.CAN_BUS,
+            return_relay=Relay.DEFAULT,
             msg_type=MessageType.COMMAND,
             board_id=BoardID.COM,
             sink_id=SinkID.COM_SWITCHES,
@@ -76,7 +77,8 @@ class TestSeaTracMessage(unittest.TestCase):
         )
         recovered = SeaTracMessage.from_bytes(bytes(original))
         self.assertTrue(recovered.is_checksum_valid)
-        self.assertEqual(recovered.relay, original.relay)
+        self.assertEqual(recovered.outbound_relay, original.outbound_relay)
+        self.assertEqual(recovered.return_relay, original.return_relay)
         self.assertEqual(recovered.msg_type, original.msg_type)
         self.assertEqual(recovered.board_id, original.board_id)
         self.assertEqual(recovered.sink_id, original.sink_id)
@@ -84,7 +86,8 @@ class TestSeaTracMessage(unittest.TestCase):
 
     def test_status_reply_header_parsed(self):
         original = SeaTracMessage(
-            relay=Relay(42),
+            outbound_relay=Relay.CAN_BUS,
+            return_relay=Relay.DEFAULT,
             msg_type=MessageType.STATUS_REPLY,
             sink_id=SinkID.MOTOR_GPS,
             timestamp=datetime.datetime(2025, 5, 31, 13, 12, 54, 0,
@@ -92,7 +95,8 @@ class TestSeaTracMessage(unittest.TestCase):
         )
         recovered = SeaTracMessage.from_bytes(bytes(original))
         self.assertTrue(recovered.is_checksum_valid)
-        self.assertEqual(recovered.relay, original.relay)
+        self.assertEqual(recovered.outbound_relay, original.outbound_relay)
+        self.assertEqual(recovered.return_relay, original.return_relay)
         self.assertEqual(recovered.msg_type, original.msg_type)
         self.assertEqual(recovered.sink_id, original.sink_id)
         self.assertEqual(recovered.timestamp, original.timestamp)
@@ -105,11 +109,12 @@ class TestSeaTracMessage(unittest.TestCase):
         # Full header, but incomplete payload
         with self.assertRaises(ValueError):
             SeaTracMessage.from_bytes(struct.pack(SeaTracMessage.HEADER_PATTERN,
-                0x00, 0xFF, 0x64, Relay(1), MessageType.COMMAND) + b'\x00' * 16)
+                0x00, 0xFF, 0x64, 8, MessageType.COMMAND) + b'\x00' * 16)
 
     def test_invalid_checksum_returns_raw_payload(self):
         msg = SeaTracMessage(
-            relay=Relay(42),
+            outbound_relay=Relay.CAN_BUS,
+            return_relay=Relay.DEFAULT,
             msg_type=MessageType.COMMAND,
             board_id=BoardID.PMS,
             sink_id=SinkID.PMS_SWITCHES,
@@ -124,7 +129,8 @@ class TestSeaTracMessage(unittest.TestCase):
 
     def test_designated_parser_returns_object(self):
         original = SeaTracMessage(
-            relay=Relay(42),
+            outbound_relay=Relay.CAN_BUS,
+            return_relay=Relay.DEFAULT,
             msg_type=MessageType.COMMAND,
             board_id=BoardID.PMS,
             sink_id=SinkID.PMS_SWITCHES,
@@ -138,7 +144,8 @@ class TestSeaTracMessage(unittest.TestCase):
     def test_no_designated_parser_payload_bytes(self):
         # Use a function ID for which no parser is registered
         original = SeaTracMessage(
-            relay=Relay(42),
+            outbound_relay=Relay.CAN_BUS,
+            return_relay=Relay.DEFAULT,
             msg_type=MessageType.COMMAND,
             board_id=BoardID.COM,
             sink_id=SinkID.COM_SWITCHES,
@@ -149,11 +156,13 @@ class TestSeaTracMessage(unittest.TestCase):
         self.assertTrue(recovered.is_checksum_valid)
         self.assertIsInstance(recovered.payload, bytes)
 
+
     def test_unknown_msg_type(self):
         msg_types = [ m.value for m in MessageType ]  # for Python < 3.12
         unknown_msg_type = next(x for x in range(256) if x not in msg_types)
         original = SeaTracMessage(
-            relay=Relay(42),
+            outbound_relay=Relay.CAN_BUS,
+            return_relay=Relay.DEFAULT,
             msg_type=unknown_msg_type,
             payload=b'',
         )
@@ -168,7 +177,7 @@ class TestSeaTracMessage(unittest.TestCase):
         self.assertIsNone(SeaTracMessage.peek_length(b'\x00\xff'))  # full sync
         self.assertIsNone(SeaTracMessage.peek_length(
             struct.pack(SeaTracMessage.HEADER_PATTERN, 0x00, 0xFF, 0x64,
-                Relay(1), MessageType.COMMAND) + b'\x00' * 16))
+                8, MessageType.COMMAND) + b'\x00' * 16))
 
     def test_peek_invalid_sync(self):
         with self.assertRaises(ValueError):
@@ -180,7 +189,8 @@ class TestSeaTracMessage(unittest.TestCase):
 
     def test_peek_complete_packet(self):
         msg = SeaTracMessage(
-            relay=Relay(42),
+            outbound_relay=Relay.CAN_BUS,
+            return_relay=Relay.DEFAULT,
             msg_type=MessageType.COMMAND,
             board_id=BoardID.COM,
             sink_id=SinkID.COM_SWITCHES,

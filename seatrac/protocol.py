@@ -15,9 +15,9 @@ class MessageType(enum.IntEnum):
     REPLY = 10
     COMMAND = 11
 
-class Relay(int):
-    # TODO
-    pass
+class Relay(enum.IntEnum):
+    DEFAULT = 0
+    CAN_BUS = 8
 
 class BoardID(enum.IntEnum):
     COM = 1
@@ -184,13 +184,17 @@ class SeaTracMessage:
     COMMAND_PATTERN = '<BBB'
     SYNC_BYTES = (0x00, 0xFF)
 
-    relay: Relay
+    outbound_relay: Union[Relay, int]
+    return_relay: Union[Relay, int]
     msg_type: Union[MessageType, int]
-    is_checksum_valid: bool = True
+
     board_id: Optional[BoardID] = None
     sink_id: Optional[SinkID] = None
     function_id: Optional[int] = None
     timestamp: Optional[datetime.datetime] = None
+
+    is_checksum_valid: bool = True
+
     payload: Any = None
 
     @classmethod
@@ -232,18 +236,28 @@ class SeaTracMessage:
         if len(data) != length + header_size + 2:
             raise ValueError('Invalid data length')
 
-        relay = Relay(relay)
-        is_checksum_valid = verify_checksum(data)
-        payload = data[header_size:-2]
+        try:
+            outbound_relay = Relay(relay & 0x0F)
+        except ValueError:
+            outbound_relay = relay & 0x0F
+
+        try:
+            return_relay = Relay(relay >> 4)
+        except ValueError:
+            return_relay = relay >> 4
 
         try:
             msg_type = MessageType(msg_type)
         except ValueError:
             pass  # fallback to using the raw integer value
 
+        payload = data[header_size:-2]
+
+        is_checksum_valid = verify_checksum(data)
         if not is_checksum_valid:
             return cls(
-                relay=relay,
+                outbound_relay=outbound_relay,
+                return_relay=return_relay,
                 msg_type=msg_type,
                 is_checksum_valid=False,
                 payload=payload
@@ -271,7 +285,8 @@ class SeaTracMessage:
             payload = payload_type.from_bytes(payload)
 
         return cls(
-            relay=relay,
+            outbound_relay=outbound_relay,
+            return_relay=return_relay,
             msg_type=msg_type,
             is_checksum_valid=is_checksum_valid,
             board_id=board_id,
@@ -305,7 +320,7 @@ class SeaTracMessage:
             self.HEADER_PATTERN,
             0x00, 0xFF,
             len(msg_type_header) + len(body),
-            self.relay,
+            (self.return_relay << 4) | self.outbound_relay,
             self.msg_type,
         )
 
