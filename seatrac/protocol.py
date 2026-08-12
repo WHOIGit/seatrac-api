@@ -17,6 +17,7 @@ class MessageType(enum.IntEnum):
 
 class Relay(enum.IntEnum):
     DEFAULT = 0
+    PC = 3  # observed on every camera manager message from the Dashboard
     CAN_BUS = 8
 
 class BoardID(enum.IntEnum):
@@ -145,11 +146,46 @@ class MOTOR_PROPULSION_FunctionID(enum.IntEnum):
 
 class PC_CAMERA_MGR_FunctionID(enum.IntEnum):
     START_ALL = 0
+    IMAGE_ACK = 1  # undocumented; see CameraImageAckCommand
     START = 2
     STOP = 3
     STOP_ALL = 4
     IMAGE_DATA_START = 5
     PTZ = 6
+
+class CameraLocation(enum.IntEnum):
+    BOW = 0
+    PORT = 1
+    STARBOARD = 2
+    STERN = 3
+    PTZ_IR = 4
+    PTZ_EO = 5
+
+class CameraResolution(enum.IntEnum):
+    LOW = 0     # 360p
+    MEDIUM = 1  # 720p
+    HIGH = 2    # 1080p
+
+class SendStream(enum.IntFlag):
+    '''
+    Bitfield identifying the link(s) used to upload image data.
+
+    CELL and STARLINK are confirmed from a decrypted capture of the Dashboard.
+    Rev5 of the interface document calls bit 4 the "Silvus Link"; the Dashboard
+    uses it for Starlink. CERTUS is taken from the document and has not been
+    observed; seatrac.video --probe can confirm it.
+    '''
+    NONE = 0
+    CELL = 1
+    CERTUS = 2
+    STARLINK = 4
+
+class CameraPeriod(enum.IntEnum):
+    '''
+    Frame timing. Values between the two extremes are seconds between frames.
+    '''
+    STREAM = 0  # continuous, nominally 10 fps
+    SINGLE = 999  # a single still image
 
 
 # Use a registry mapping board, sink, function -> payload class so that the
@@ -161,6 +197,7 @@ FunctionID = Union[
     PC_CAMERA_MGR_FunctionID,
     PMS_SWITCHES_FunctionID,
 ]
+CameraFrameTiming = Union[CameraPeriod, int]
 MessageKey = Tuple[MessageType, Optional[BoardID], Optional[SinkID],
     Optional[FunctionID]]
 _PAYLOAD_REGISTRY: Dict[MessageKey, Type] = {}
@@ -430,6 +467,275 @@ class PMSSwitchStatusMessage:
         packed = sum(int(b) << i for i, b in enumerate(self.states))
         n = (self.NUM_SWITCHES + 7) // 8  # number of bytes needed
         return struct.pack(self.PATTERN, b'', *packed.to_bytes(n, 'little'))
+
+
+@register_message(
+    MessageType.COMMAND,
+    board_id=BoardID.PC,
+    sink_id=SinkID.PC_CAMERA_MGR,
+    function_id=PC_CAMERA_MGR_FunctionID.START,
+)
+@dataclasses.dataclass
+class CameraStartStreamCommand:
+    PATTERN = '<BBHB'
+
+    location: Union[CameraLocation, int]
+    resolution: Union[CameraResolution, int] = CameraResolution.LOW
+    period: CameraFrameTiming = CameraPeriod.STREAM
+    send_stream: Union[SendStream, int] = SendStream.NONE
+
+    @classmethod
+    def from_bytes(cls, data: bytes) -> 'CameraStartStreamCommand':
+        if len(data) != struct.calcsize(cls.PATTERN):
+            raise ValueError('Invalid data length')
+
+        location, resolution, period, send_stream = \
+            struct.unpack(cls.PATTERN, data)
+        return cls(
+            location=_coerce(CameraLocation, location),
+            resolution=_coerce(CameraResolution, resolution),
+            period=_coerce(CameraPeriod, period),
+            send_stream=SendStream(send_stream),
+        )
+
+    def __bytes__(self) -> bytes:
+        return struct.pack(self.PATTERN, self.location, self.resolution,
+            self.period, self.send_stream)
+
+
+@register_message(
+    MessageType.COMMAND,
+    board_id=BoardID.PC,
+    sink_id=SinkID.PC_CAMERA_MGR,
+    function_id=PC_CAMERA_MGR_FunctionID.STOP,
+)
+@dataclasses.dataclass
+class CameraStopStreamCommand:
+    PATTERN = '<BB'
+
+    location: Union[CameraLocation, int]
+    send_stream: Union[SendStream, int] = SendStream.NONE
+
+    @classmethod
+    def from_bytes(cls, data: bytes) -> 'CameraStopStreamCommand':
+        if len(data) != struct.calcsize(cls.PATTERN):
+            raise ValueError('Invalid data length')
+
+        location, send_stream = struct.unpack(cls.PATTERN, data)
+        return cls(
+            location=_coerce(CameraLocation, location),
+            send_stream=SendStream(send_stream),
+        )
+
+    def __bytes__(self) -> bytes:
+        return struct.pack(self.PATTERN, self.location, self.send_stream)
+
+
+@register_message(MessageType.STATUS_REPLY, sink_id=SinkID.PC_CAMERA_MGR)
+@dataclasses.dataclass
+class CameraStatusMessage:
+    '''
+    Once-per-second report of what the cameras are actually doing, sent while a
+    stream is running on the connection carrying it.
+
+    This is how the Dashboard knows a Start Stream command took effect: the
+    reported resolution lags the command by a second or so, which is the delay
+    before its resolution buttons stop being highlighted. Only the two fields
+    below have been identified; the rest of the 186 byte payload is kept as-is.
+    '''
+    PATTERN = '<3sBB'
+
+    resolution: Union[CameraResolution, int]
+    send_stream: Union[SendStream, int]
+    remainder: bytes = b''
+
+    @classmethod
+    def from_bytes(cls, data: bytes) -> 'CameraStatusMessage':
+        header_size = struct.calcsize(cls.PATTERN)
+        if len(data) < header_size:
+            raise ValueError('Invalid data length')
+
+        _, resolution, send_stream = struct.unpack_from(cls.PATTERN, data)
+        return cls(
+            resolution=_coerce(CameraResolution, resolution),
+            send_stream=SendStream(send_stream),
+            remainder=data[header_size:],
+        )
+
+    def __bytes__(self) -> bytes:
+        return struct.pack(self.PATTERN, b'', self.resolution,
+            self.send_stream) + self.remainder
+
+
+@register_message(
+    MessageType.COMMAND,
+    board_id=BoardID.PC,
+    sink_id=SinkID.PC_CAMERA_MGR,
+    function_id=PC_CAMERA_MGR_FunctionID.IMAGE_ACK,
+)
+@dataclasses.dataclass
+class CameraImageAckCommand:
+    '''
+    Acknowledgement of one received image frame, identified by the timestamp the
+    boat put in the frame's first chunk.
+
+    This message is not in the interface document. It was found in a packet
+    capture of the Dashboard, which sends exactly one per frame it reassembles,
+    a few milliseconds after the last chunk arrives, and sends none when no
+    stream is running. Whether the boat requires it in order to keep sending is
+    not known, so it is best to imitate the Dashboard and send it.
+    '''
+    PATTERN = '<BB'
+
+    location: Union[CameraLocation, int]
+    send_stream: Union[SendStream, int]
+    timestamp: Optional[datetime.datetime] = None
+
+    @classmethod
+    def from_bytes(cls, data: bytes) -> 'CameraImageAckCommand':
+        header_size = struct.calcsize(cls.PATTERN)
+        if len(data) != header_size + struct.calcsize(datetime_PATTERN):
+            raise ValueError('Invalid data length')
+
+        location, send_stream = struct.unpack_from(cls.PATTERN, data)
+        return cls(
+            location=_coerce(CameraLocation, location),
+            send_stream=SendStream(send_stream),
+            timestamp=datetime_frombytes(data[header_size:]),
+        )
+
+    def __bytes__(self) -> bytes:
+        return struct.pack(self.PATTERN, self.location, self.send_stream) \
+            + datetime___bytes__(self.timestamp)
+
+
+@dataclasses.dataclass
+class ImageAttitude:
+    '''
+    Camera and vessel geometry accompanying the first chunk of an image frame.
+    The distortion correction fields are not used on the PTZ cameras, and the
+    PTZ fields are not meaningful for the fixed cameras.
+    '''
+    PATTERN = '<9f'
+
+    strength: float = 0.0
+    zoom: float = 0.0
+    camera_height: float = 0.0  # feet above the water
+    heading: float = 0.0  # the vessel's heading
+    ptz_azimuth: float = 0.0
+    ptz_elevation: float = 0.0
+    ptz_view_angle: float = 0.0  # total horizontal field of view
+    image_rotation: float = 0.0
+    image_height: float = 0.0
+
+    @classmethod
+    def from_bytes(cls, data: bytes) -> 'ImageAttitude':
+        if len(data) != struct.calcsize(cls.PATTERN):
+            raise ValueError('Invalid data length')
+        return cls(*struct.unpack(cls.PATTERN, data))
+
+    def __bytes__(self) -> bytes:
+        return struct.pack(self.PATTERN,
+            *(getattr(self, f.name) for f in dataclasses.fields(self)))
+
+
+@register_message(
+    MessageType.REPLY,
+    board_id=BoardID.PC,
+    sink_id=SinkID.PC_CAMERA_MGR,
+    function_id=PC_CAMERA_MGR_FunctionID.IMAGE_DATA_START,
+)
+@dataclasses.dataclass
+class ImageDataMessage:
+    '''
+    One chunk of H.264 data uploaded by the boat.
+
+    A message is one of three shapes, distinguished by n_chunks and chunk:
+
+      - a setup frame (n_chunks == 1, chunk == 0) carrying parameter sets that
+        must be handed to the decoder before any image data;
+      - the first chunk of an image frame (chunk == 1), which also carries the
+        attitude and the capture timestamp; or
+      - a continuation chunk (chunk > 1), which is data only.
+
+    Note that chunk numbering for image frames is 1-based, so the last chunk is
+    chunk == n_chunks.
+    '''
+    START_PATTERN = '<BBHH'
+    SIZE_PATTERN = '<H'
+
+    location: Union[CameraLocation, int]
+    send_stream: Union[SendStream, int]
+    n_chunks: int
+    chunk: int
+    data: bytes = b''
+
+    # Present only on the first chunk of an image frame
+    attitude: Optional[ImageAttitude] = None
+    timestamp: Optional[datetime.datetime] = None
+
+    @property
+    def is_setup_frame(self) -> bool:
+        return self.chunk == 0
+
+    @classmethod
+    def from_bytes(cls, data: bytes) -> 'ImageDataMessage':
+        start_size = struct.calcsize(cls.START_PATTERN)
+        if len(data) < start_size:
+            raise ValueError('Invalid data length')
+
+        location, send_stream, n_chunks, chunk = \
+            struct.unpack_from(cls.START_PATTERN, data)
+        offset = start_size
+
+        attitude = timestamp = None
+        if chunk == 1:
+            attsize = struct.calcsize(ImageAttitude.PATTERN)
+            dtsize = struct.calcsize(datetime_PATTERN)
+            attitude = ImageAttitude.from_bytes(data[offset:offset+attsize])
+            offset += attsize
+            timestamp = datetime_frombytes(data[offset:offset+dtsize])
+            offset += dtsize
+
+        size_size = struct.calcsize(cls.SIZE_PATTERN)
+        if len(data) < offset + size_size:
+            raise ValueError('Invalid data length')
+
+        size, = struct.unpack_from(cls.SIZE_PATTERN, data, offset)
+        offset += size_size
+
+        if len(data) - offset != size:
+            raise ValueError('Image data size does not match message length')
+
+        return cls(
+            location=_coerce(CameraLocation, location),
+            send_stream=SendStream(send_stream),
+            n_chunks=n_chunks,
+            chunk=chunk,
+            data=data[offset:offset+size],
+            attitude=attitude,
+            timestamp=timestamp,
+        )
+
+    def __bytes__(self) -> bytes:
+        packet = struct.pack(self.START_PATTERN, self.location,
+            self.send_stream, self.n_chunks, self.chunk)
+        if self.chunk == 1:
+            attitude = self.attitude or ImageAttitude()
+            packet += bytes(attitude) + datetime___bytes__(self.timestamp)
+        packet += struct.pack(self.SIZE_PATTERN, len(self.data)) + self.data
+        return packet
+
+
+def _coerce(enum_type: Type, value: int) -> Any:
+    '''
+    Return value as a member of enum_type, or the raw integer if the value is
+    not a known member.
+    '''
+    try:
+        return enum_type(value)
+    except ValueError:
+        return value
 
 
 # Can't monkey patch the datetime.datetime class :(

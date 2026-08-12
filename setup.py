@@ -11,6 +11,7 @@ setup(
     entry_points={
         "console_scripts": [
             "seatrac=seatrac.__main__:main",
+            "seatrac-video=seatrac.video:main",
         ],
     },
 )

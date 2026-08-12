@@ -12,19 +12,31 @@ Socket = Union[socket.socket, ssl.SSLContext.sslsocket_class]
 RecvCallable = Callable[[int], bytes]
 
 
+def messages(recv: RecvCallable) -> Generator[SeaTracMessage, None, None]:
+    '''
+    Yield messages read from recv. Unlike loop(), the caller retains ownership
+    of the socket, which is useful when there is still work to do (such as
+    stopping a camera stream) after reading has finished.
+    '''
+    buffer = bytearray()
+    while True:
+        data = recv(1024)
+        if not data:
+            return  # connection closed
+        buffer.extend(data)
+        while ready := SeaTracMessage.peek_length(buffer):
+            packet, buffer = buffer[:ready], buffer[ready:]
+            try:
+                yield SeaTracMessage.from_bytes(packet)
+            except:
+                print(f'Exception while handling packet {packet.hex()}:')
+                traceback.print_exc()
+
+
 def loop(sock: Socket, recv: RecvCallable) \
 -> Generator[SeaTracMessage, None, None]:
-    buffer = bytearray()
     try:
-        while True:
-            buffer.extend(recv(1024))
-            while ready := SeaTracMessage.peek_length(buffer):
-                packet, buffer = buffer[:ready], buffer[ready:]
-                try:
-                    yield SeaTracMessage.from_bytes(packet)
-                except:
-                    print(f'Exception while handling packet {packet.hex()}:')
-                    traceback.print_exc()
+        yield from messages(recv)
     except KeyboardInterrupt:
         print("Shutting down...")
     finally:
