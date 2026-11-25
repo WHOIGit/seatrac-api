@@ -1,6 +1,6 @@
 # SeaTrac API for Python
 
-This repository contains the `seatrac` Python package for interfacing with a [SeaTrac Systems SP-48 autonomous surface vessel](https://www.seatrac.com), along with a [ROS 1](https://ros.org) node for integration with ROS-based systems.
+This repository contains the `seatrac` Python package for interfacing with a [SeaTrac Systems SP-48 autonomous surface vessel](https://www.seatrac.com), along with a [ROS 2](https://ros.org) node for integration with ROS-based systems.
 
 Documentation of the protocol is out of scope for this repository. Please contact SeaTrac Systems with questions.
 
@@ -64,70 +64,47 @@ In `--connect` mode, it may be useful to use `--relay host port` which forwards 
 
 ## ROS Node
 
-The `seatrac` ROS node interfaces between the ROS graph and the SeaTrac vessel. It supports [ROS Noetic Ninjemys](https://wiki.ros.org/noetic). ROS 2 is not yet supported.
+The `seatrac` node publishes vessel telemetry and accepts commands for configured outlets. The ROS 1 implementation is available on the [noetic branch](https://github.com/WHOIGit/seatrac-api/tree/noetic).
 
+### Build
 
-### Network communication
+In a shell with ROS 2 Foxy or Rolling sourced, build the node and its [WHOI message dependencies](https://git.whoi.edu/whoi-ros/wr2_msgs) in a colcon workspace.
 
-The node does not communicate directly with the boat; instead, the `~in` and `~out` topics carry [ds_core_msgs/RawData](https://bitbucket.org/whoidsl/ds_msgs/src/master/ds_core_msgs/msg/RawData.msg) messages.
-
-An easy way to connect UDP traffic with these topics is to use the bridge_node from [ds_util_nodes](https://bitbucket.org/whoidsl/ds_base/src/master/ds_util_nodes/). An example is given below.
-
-The UDP communications within the boat network can be configured using the SeaTrac Dashboard app. This is outside the scope of this documentation.
-
-
-### Installation
-
-Clone this repository into the `src/` directory of a ROS workspace. ROS will automatically discover the `seatrac` package in the directory hierarchy.
-
-
-### Launch configuration
-
-```xml
-<launch>
-    <rosparam command="load" file="seatrac.yaml" />
-
-    <node name="seatrac" pkg="seatrac" type="seatrac_node.py">
-        <!-- remap i/o to the bridge_node topics -->
-        <remap from="~in" to="~comms/in" />
-        <remap from="~out" to="~comms/out" />
-    </node>
-
-    <node ns="seatrac" name="comms" pkg="ds_util_nodes" type="bridge_node"/>
-</launch>
+```sh
+mkdir -p ~/seatrac_ws/src
+cd ~/seatrac_ws
+git clone https://github.com/WHOIGit/seatrac-api.git src/seatrac-api
+git clone https://git.whoi.edu/whoi-ros/wr2_msgs.git src/wr2_msgs
+colcon build --packages-up-to seatrac
+. install/setup.sh
 ```
 
-``` yaml
-seatrac:
-  outlets:
-    - name: "starlink"
-      outlet: 15
+Foxy reached end of life in June 2023. Rolling receives breaking changes, and WHOI targets Humble with additional testing on Jazzy. The Foxy and Rolling builds were tested with WHOI revision `5712cca`. [ROS 2 distributions](https://docs.ros.org/en/rolling/Releases.html) · [WHOI-ROS](https://whoi-ros.pages.whoi.edu/)
 
-  # Configuration for the bridge_node
-  comms:
-    connection:
-      type: "UDP"
-      udp_rx: 62001
-      udp_tx: 62001
-      udp_address: "10.1.20.88"
+### Run
+
+The node exchanges [`wr2_msgs/msg/RawData`](https://git.whoi.edu/whoi-ros/wr2_msgs/-/blob/5712cca06b294aa370efb3ceb53a2cdd2e971b9f/wr2_msgs/msg/RawData.msg) with a separate transport bridge. For a bridge publishing incoming bytes on `/seatrac/comms/in` and subscribing to commands on `/seatrac/comms/out`, start the node with these remaps. The vessel’s UDP settings are configured in the SeaTrac Dashboard app.
+
+```sh
+ros2 run seatrac seatrac_node --ros-args --params-file seatrac.yaml \
+  -r '~/in:=/seatrac/comms/in' -r '~/out:=/seatrac/comms/out'
 ```
 
+Each entry under `outlets` in `seatrac.yaml` maps a name to a unique, one-based switch number from 1 through 18. Omit the parameters file to receive battery telemetry alone.
 
-### Parameters
+```yaml
+/seatrac:
+  ros__parameters:
+    outlets:
+      starlink: 15
+```
 
-- `~outlets`: A list of objects with `name` and `outlet` (switch index, 1-based)
+| Topic | Direction | Message | Contents |
+| --- | --- | --- | --- |
+| `~/in` | Subscribes | `wr2_msgs/msg/RawData` | Incoming SeaTrac bytes |
+| `~/out` | Publishes | `wr2_msgs/msg/RawData` | Outgoing SeaTrac commands |
+| `~/power` | Publishes | `seatrac/msg/PowerLevel` | Battery current, voltage and state of charge |
+| `~/outlet/<name>/status` | Publishes | `seatrac/msg/OutletStatus` | Switch state |
+| `~/outlet/<name>/control` | Subscribes | `std_msgs/msg/Bool` | Requested switch state |
 
-The `comm` parameters in the above example belong to bridge_node.
-
-
-### Subscribed Topics
-
-- `~in` (ds_core_msgs/RawData): Incoming SeaTrac packets.
-- `~outlet/<name>/control` (std_msgs/Bool): Control the named outlet.
-
-
-### Published Topics
-
-- `~out` (ds_core_msgs/RawData): Outgoing SeaTrac packets.
-- `~outlet/<name>/status` (seatrac/OutletStatus): On/off status of the named outlet.
-- `~power` (seatrac/PowerLevel): Battery pack state of charge and current draw.
+For telemetry, `header.stamp` is the timestamp reported by the boat and `ds_header.io_time` is the node’s receipt time. If the boat omits the timestamp, both fields carry the receipt time.
