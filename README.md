@@ -64,70 +64,76 @@ In `--connect` mode, it may be useful to use `--relay host port` which forwards 
 
 ## ROS Node
 
-The `seatrac` ROS node interfaces between the ROS graph and the SeaTrac vessel. It supports ROS 2 Foxy Fitzroy and Rolling Ridley. The instructions below are for ROS 1 Noetic on the [noetic branch](https://github.com/WHOIGit/seatrac-api/tree/noetic).
+The `seatrac` ROS node interfaces between the ROS graph and the SeaTrac vessel. It supports ROS 2 Foxy Fitzroy, Humble Hawksbill, and Rolling Ridley. ROS 1 Noetic is available on the [noetic branch](https://github.com/WHOIGit/seatrac-api/tree/noetic).
 
 
 ### Network communication
 
-The node does not communicate directly with the boat; instead, the `~in` and `~out` topics carry [ds_core_msgs/RawData](https://bitbucket.org/whoidsl/ds_msgs/src/master/ds_core_msgs/msg/RawData.msg) messages.
+The node does not communicate directly with the boat; instead, the `~/in` and `~/out` topics carry [wr2_msgs/msg/RawData](https://git.whoi.edu/whoi-ros/wr2_msgs/-/blob/5712cca06b294aa370efb3ceb53a2cdd2e971b9f/wr2_msgs/msg/RawData.msg) messages.
 
-An easy way to connect UDP traffic with these topics is to use the bridge_node from [ds_util_nodes](https://bitbucket.org/whoidsl/ds_base/src/master/ds_util_nodes/). An example is given below.
+On Humble, an easy way to connect UDP traffic with these topics is to use the adapter_node from [wr2_asio](https://git.whoi.edu/whoi-ros/wr2_asio). An example is given below.
 
 The UDP communications within the boat network can be configured using the SeaTrac Dashboard app. This is outside the scope of this documentation.
 
 
 ### Installation
 
-Clone this repository into the `src/` directory of a ROS workspace. ROS will automatically discover the `seatrac` package in the directory hierarchy.
+Clone this repository and [wr2_msgs](https://git.whoi.edu/whoi-ros/wr2_msgs) into the `src/` directory of a ROS 2 workspace. For the UDP example, also clone [wr2_base](https://git.whoi.edu/whoi-ros/wr2_base) and [wr2_asio](https://git.whoi.edu/whoi-ros/wr2_asio). Install their dependencies with rosdep, build with `colcon build --packages-up-to seatrac` (add `wr2_asio` for the example), and source `install/setup.bash`.
 
 
 ### Launch configuration
 
+To run the node alone, use `ros2 run seatrac seatrac_node --ros-args --params-file seatrac.yaml`.
+
 ```xml
 <launch>
-    <rosparam command="load" file="seatrac.yaml" />
-
-    <node name="seatrac" pkg="seatrac" type="seatrac_node.py">
-        <!-- remap i/o to the bridge_node topics -->
-        <remap from="~in" to="~comms/in" />
-        <remap from="~out" to="~comms/out" />
+    <node name="seatrac" pkg="seatrac" exec="seatrac_node">
+        <param from="$(dirname)/seatrac.yaml" />
+        <!-- remap i/o to the adapter_node topics -->
+        <remap from="~/in" to="~/comms/in" />
+        <remap from="~/out" to="~/comms/out" />
     </node>
 
-    <node ns="seatrac" name="comms" pkg="ds_util_nodes" type="bridge_node"/>
+    <node namespace="seatrac" name="comms" pkg="wr2_asio" exec="adapter_node">
+        <param from="$(dirname)/seatrac.yaml" />
+        <remap from="ros_connection/transmit" to="~/in" />
+        <remap from="ros_connection/receive" to="~/out" />
+    </node>
 </launch>
 ```
 
 ``` yaml
-seatrac:
-  outlets:
-    - name: "starlink"
-      outlet: 15
+/seatrac:
+  ros__parameters:
+    outlets:
+      starlink: 15
 
-  # Configuration for the bridge_node
-  comms:
+# Configuration for the adapter_node
+/seatrac/comms:
+  ros__parameters:
     connection:
-      type: "UDP"
-      udp_rx: 62001
-      udp_tx: 62001
-      udp_address: "10.1.20.88"
+      connection_type: udp
+      listen_port: 62001
+      destination_port: 62001
+      destination_address: "10.1.20.88"
 ```
 
 
 ### Parameters
 
-- `~outlets`: A list of objects with `name` and `outlet` (switch index, 1-based)
+- `outlets.<name>`: Switch index for the named outlet (1-based)
 
-The `comm` parameters in the above example belong to bridge_node.
+The `/seatrac/comms` parameters in the above example belong to adapter_node.
 
 
 ### Subscribed Topics
 
-- `~in` (ds_core_msgs/RawData): Incoming SeaTrac packets.
-- `~outlet/<name>/control` (std_msgs/Bool): Control the named outlet.
+- `~/in` (wr2_msgs/msg/RawData): Incoming SeaTrac packets.
+- `~/outlet/<name>/control` (std_msgs/msg/Bool): Control the named outlet.
 
 
 ### Published Topics
 
-- `~out` (ds_core_msgs/RawData): Outgoing SeaTrac packets.
-- `~outlet/<name>/status` (seatrac/OutletStatus): On/off status of the named outlet.
-- `~power` (seatrac/PowerLevel): Battery pack state of charge and current draw.
+- `~/out` (wr2_msgs/msg/RawData): Outgoing SeaTrac packets.
+- `~/outlet/<name>/status` (seatrac/msg/OutletStatus): On/off status of the named outlet.
+- `~/power` (seatrac/msg/PowerLevel): Battery pack state of charge and current draw.
